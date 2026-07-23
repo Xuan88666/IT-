@@ -39,6 +39,11 @@ async function check(name, task) { await task(); checks.push(name); console.log(
 try {
   await waitForServer();
   await check('首页可访问', async () => { const text = await (await request('/')).text(); if (!text.includes('id="app"')) throw new Error('首页缺少应用挂载点'); });
+  await check('本地 Shoelace 组件运行时可访问', async () => {
+    const text = await (await request('/')).text();
+    if (!text.includes('/node_modules/@shoelace-style/shoelace/')) throw new Error('首页未加载本地 Shoelace 组件运行时');
+    await request('/node_modules/@shoelace-style/shoelace/dist/themes/light.css');
+  });
   await check('首次需要初始化管理员', async () => { const data = await json('/api/auth/me'); if (!data.bootstrapRequired || data.authenticated) throw new Error('未进入首次初始化状态'); });
   await check('未登录数据接口被拦截', async () => { await request('/api/assets', {}, 401); await request('/api/tools/ping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: '127.0.0.1' }) }, 401); });
 
