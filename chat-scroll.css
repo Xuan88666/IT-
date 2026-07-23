@@ -1,0 +1,96 @@
+.chat-messages {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+
+.chat-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 12px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-left: 1px solid #e2e8f0;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #9fb2c7;
+  border: 3px solid #f1f5f9;
+  border-radius: 9px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #6f879f;
+}
+
+.ai-quick-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.ai-quick-prompts .chip {
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.chat-message-body {
+  min-width: 0;
+}
+
+.ai-suggested-tools {
+  margin-top: 9px;
+  padding: 10px;
+  border: 1px solid #dce7e5;
+  border-radius: 7px;
+  background: #f7fbfa;
+}
+
+.ai-suggested-tools > span {
+  display: block;
+  margin-bottom: 7px;
+  color: #60726f;
+  font-size: 12px;
+}
+
+.ai-suggested-tools > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ai-suggested-tools .ghost {
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.ai-message-actions{display:flex;gap:7px;margin-top:8px}.ai-message-actions .ghost{padding:7px 9px;font-size:12px;border-color:#bddad4;color:#0d766c;background:#fff}
+.ai-ticket-linked{display:inline-flex;align-items:center;padding:7px 9px;border-radius:7px;background:#e7f7ed;color:#16784f;font-size:12px;font-weight:600}
+.ai-ops-brief{margin-top:9px;border:1px solid #cfe2de;border-radius:7px;background:#fbfefd;overflow:hidden}.ai-ops-brief-head{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;background:#edf8f5;color:#145e55;font-size:12px;font-weight:700}.ai-ops-brief-head span{font-weight:500;color:#687b77}.ai-ops-brief>div:not(.ai-ops-brief-head){display:grid;grid-template-columns:72px minmax(0,1fr);gap:8px;padding:8px 10px;border-top:1px solid #e6f0ee;font-size:12px}.ai-ops-brief strong{color:#315e58}.ai-ops-brief p{margin:0;white-space:pre-wrap;color:#465b58;line-height:1.55}@media(max-width:560px){.ai-ops-brief>div:not(.ai-ops-brief-head){grid-template-columns:1fr;gap:3px}.ai-ops-brief-head{align-items:flex-start;gap:8px}}
+/* Agent 排障 Trace */
+.agent-trace{margin:8px 0;display:flex;flex-direction:column;gap:6px}
+.agent-think{display:flex;align-items:flex-start;gap:6px;padding:6px 8px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;font-size:12px;color:#854d0e}
+.agent-think em{font-style:normal;line-height:1.5}
+.agent-tool{border:1px solid #dbe4ea;border-radius:6px;overflow:hidden;font-size:12px}
+.agent-tool summary{display:flex;align-items:center;gap:6px;padding:7px 9px;background:#f8fafc;cursor:pointer;list-style:none;user-select:none;font-weight:500;color:#334155}
+.agent-tool summary::-webkit-details-marker{display:none}
+.agent-tool summary::marker{display:none;content:''}
+.agent-tool summary em{margin-left:auto;font-size:11px;font-style:normal;padding:2px 6px;border-radius:8px;font-weight:600}
+.agent-tool-ok{border-left:3px solid #0d766c}.agent-tool-ok summary{background:#edf8f5}.agent-tool-ok em{background:#dcfce7;color:#14784f}
+.agent-tool-fail{border-left:3px solid #d14343}.agent-tool-fail summary{background:#fef6f6}.agent-tool-fail em{background:#fee2e2;color:#b91c1c}
+.agent-tool-pending{border-left:3px solid #cbd5e1}.agent-tool-pending summary{background:#f8fafc;animation:agent-pulse 1.5s infinite}
+.agent-tool pre{white-space:pre-wrap;padding:8px 10px;margin:0;background:#fff;font:11px/1.55 Consolas,"Microsoft YaHei",sans-serif;color:#475569;max-height:240px;overflow:auto;border-top:1px solid #e2e8f0}
+.agent-ask-user{display:flex;align-items:flex-start;gap:8px;padding:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e40af}
+.agent-ask-user strong{display:block;margin-bottom:4px;font-size:13px}
+.agent-ask-user p{margin:0 0 6px 0;line-height:1.5}
+.agent-ask-options{display:flex;flex-wrap:wrap;gap:6px}
+@keyframes agent-pulse{0%,100%{opacity:1}50%{opacity:.55}}

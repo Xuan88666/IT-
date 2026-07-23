@@ -1,0 +1,303 @@
+.topology-live {
+  margin-top: 18px;
+}
+
+.snmp-neighbor-panel {
+  margin-bottom: 18px;
+}
+
+.snmp-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.snmp-form label {
+  display: grid;
+  gap: 5px;
+  color: #526579;
+  font-size: 12px;
+}
+
+.snmp-form .primary {
+  min-height: 38px;
+}
+
+.topology-site {
+  border-top: 1px solid #e5edf3;
+  padding: 18px 0;
+}
+
+.topology-site:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.topology-site-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.topology-site-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.topology-site-head span {
+  color: #718096;
+  font-size: 12px;
+}
+
+.topology-assets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.topology-tree {
+  display: grid;
+  gap: 14px;
+}
+
+.topology-node {
+  position: relative;
+  max-width: 100%;
+}
+
+.topology-children {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin: 10px 0 0 28px;
+  padding: 10px 0 0 14px;
+  border-left: 2px solid #b9d7d3;
+}
+
+.topology-children > .topology-node::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 28px;
+  width: 12px;
+  border-top: 2px solid #b9d7d3;
+}
+
+.asset-topology-panel {
+  margin-top: 16px;
+}
+
+.asset-dossier-panel {
+  margin-top: 16px;
+}
+
+.asset-evidence-panel {
+  margin-top: 16px;
+}
+
+.asset-link-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(180px, 1.5fr) minmax(120px, 1fr) minmax(100px, .7fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.asset-link-form label {
+  display: grid;
+  gap: 5px;
+  color: #526579;
+  font-size: 12px;
+}
+
+.asset-link-form .primary {
+  min-height: 38px;
+}
+
+.asset-link-summary {
+  margin-top: 12px;
+  color: #526579;
+  font-size: 13px;
+}
+
+.asset-dossier-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.asset-dossier-form label {
+  display: grid;
+  gap: 5px;
+  color: #526579;
+  font-size: 12px;
+}
+
+.asset-dossier-form .asset-dossier-notes {
+  grid-column: span 2;
+}
+
+.asset-dossier-form .diagnosis-box {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.asset-dossier-form .primary {
+  min-height: 38px;
+}
+
+.agent-collection-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid #0d766c;
+  background: #f4faf9;
+  color: #526579;
+  font-size: 12px;
+}
+
+.agent-collection-summary strong {
+  color: #173a3a;
+}
+
+.asset-evidence-actions {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(200px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.asset-evidence-actions label {
+  display: grid;
+  gap: 5px;
+  color: #526579;
+  font-size: 12px;
+}
+
+.asset-evidence-actions .primary {
+  min-height: 38px;
+}
+
+.asset-evidence-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.asset-evidence-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e5edf3;
+  background: #fbfdff;
+  font-size: 13px;
+}
+
+.asset-evidence-item a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0d766c;
+}
+
+.asset-evidence-item span {
+  color: #718096;
+  font-size: 12px;
+}
+
+.topology-asset {
+  min-height: 104px;
+  border: 1px solid #dce7ee;
+  border-left: 4px solid #0d766c;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.topology-asset.offline {
+  border-left-color: #c2413a;
+}
+
+.topology-asset h4 {
+  margin: 0 0 7px;
+  font-size: 14px;
+}
+
+.topology-asset p {
+  margin: 3px 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+@media (max-width: 1000px) {
+  .topology-assets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .topology-assets {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .asset-link-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .asset-dossier-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .asset-evidence-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .asset-dossier-form .asset-dossier-notes {
+    grid-column: span 2;
+  }
+
+  .snmp-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 440px) {
+  .topology-assets {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-link-form {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-dossier-form {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-evidence-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-evidence-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .asset-evidence-item span {
+    display: none;
+  }
+
+  .asset-dossier-form .asset-dossier-notes {
+    grid-column: auto;
+  }
+
+  .snmp-form {
+    grid-template-columns: 1fr;
+  }
+}

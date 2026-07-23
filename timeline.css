@@ -1,0 +1,49 @@
+.incident-timeline-overlay {
+  position: fixed;
+  z-index: 31;
+  inset: 52px 0 0;
+  background: rgba(15, 30, 43, 0.28);
+  display: grid;
+  place-items: start center;
+  padding: 46px 18px;
+}
+
+.incident-timeline-panel {
+  width: min(820px, 100%);
+  max-height: min(700px, calc(100vh - 150px));
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #d8e3eb;
+  box-shadow: 0 16px 48px rgba(15, 30, 43, 0.22);
+  padding: 18px;
+}
+
+.incident-timeline-item {
+  position: relative;
+  border-left: 2px solid #b8ddd8;
+  margin-left: 8px;
+  padding: 0 0 18px 20px;
+}
+
+.incident-timeline-item::before {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  left: -6px;
+  top: 4px;
+  border-radius: 50%;
+  background: #0d766c;
+}
+
+.incident-timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+.incident-timeline-item time,
+.incident-timeline-item p {
+  display: block;
+  color: #718096;
+  font-size: 12px;
+  margin: 4px 0 0;
+}

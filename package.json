@@ -1,0 +1,21 @@
+{
+  "name": "it-ops-toolbox",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.mjs",
+    "build": "vite build",
+    "test": "node scripts/smoke-test.mjs",
+    "check": "node --check server.mjs && node --check app.js && node --check enhancements.js && vite build && node scripts/smoke-test.mjs",
+    "package:portable": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1"
+  },
+  "devDependencies": {
+    "vite": "^7.1.7"
+  },
+  "dependencies": {
+    "@tesseract.js-data/chi_sim": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "pdf-parse": "^2.4.5",
+    "tesseract.js": "^7.0.0"
+  }
+}

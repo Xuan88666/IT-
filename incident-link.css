@@ -1,0 +1,150 @@
+.incident-command-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.incident-command-actions-three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.incident-command-actions-four {
+  grid-template-columns: 1fr 1fr;
+}
+
+.incident-last-action {
+  margin-top: 7px !important;
+  color: #0d766c !important;
+}
+
+.ticket-asset-link-panel {
+  margin-top: 16px;
+}
+
+.ticket-asset-link-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(220px, 1.4fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.ticket-asset-link-form label {
+  display: grid;
+  gap: 5px;
+  color: #526579;
+  font-size: 12px;
+}
+
+.ticket-asset-link-form .primary {
+  min-height: 38px;
+}
+
+.ticket-asset-link-summary {
+  margin-top: 12px;
+  color: #526579;
+  font-size: 13px;
+}
+
+.worklog-link-panel {
+  border-top: 1px solid #e5edf3;
+  padding-top: 14px;
+}
+
+.worklog-link-panel h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.worklog-link-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.worklog-link-grid label {
+  display: grid;
+  gap: 5px;
+  color: #526579;
+  font-size: 12px;
+}
+
+.worklog-evidence-panel {
+  border-top: 1px solid #e5edf3;
+  padding-top: 14px;
+}
+
+.worklog-evidence-panel h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.worklog-evidence-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.worklog-evidence-actions input {
+  max-width: 100%;
+}
+
+.worklog-evidence-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.worklog-evidence-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e5edf3;
+  background: #fbfdff;
+  font-size: 13px;
+}
+
+.worklog-evidence-item a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0d766c;
+}
+
+.worklog-evidence-item span {
+  color: #718096;
+  font-size: 12px;
+}
+
+@media (max-width: 600px) {
+  .incident-command-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .incident-command-actions-three {
+    grid-template-columns: 1fr;
+  }
+
+  .incident-command-actions-four {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-asset-link-form {
+    grid-template-columns: 1fr;
+  }
+
+  .worklog-link-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .worklog-evidence-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .worklog-evidence-item span {
+    display: none;
+  }
+}

@@ -1,0 +1,49 @@
+.asset-monitoring-panel {
+  margin-top: 18px;
+}
+
+.compact-output {
+  min-height: 150px;
+  max-height: 340px;
+}
+
+.monitoring-history {
+  margin-top: 16px;
+}
+
+.monitoring-history h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.monitoring-history-item {
+  border-top: 1px solid #edf1f5;
+  padding: 10px 0;
+}
+
+.monitoring-history-item summary {
+  display: grid;
+  grid-template-columns: 170px 1fr auto;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.monitoring-history-item span {
+  color: #718096;
+  font-size: 12px;
+}
+
+.monitoring-history-item em {
+  font-size: 12px;
+  font-style: normal;
+}
+
+.monitoring-history-item pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: #f8fafc;
+  padding: 10px;
+  margin: 10px 0 0;
+  font: 12px/1.6 Consolas, "Microsoft YaHei", sans-serif;
+}
