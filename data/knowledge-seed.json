@@ -1,0 +1,380 @@
+{
+  "brands": [
+    {
+      "id": "Huawei",
+      "name": "华为",
+      "category": "网络/交换机/无线",
+      "url": "https://support.huawei.com/enterprise/"
+    },
+    {
+      "id": "H3C",
+      "name": "新华三 H3C",
+      "category": "网络/交换机/无线",
+      "url": "https://www.h3c.com/cn/Service/Document_Software/Document_Center/"
+    },
+    {
+      "id": "Ruijie",
+      "name": "锐捷",
+      "category": "网络/交换机/无线",
+      "url": "https://www.ruijie.com.cn/fw/wd/"
+    },
+    {
+      "id": "TP-Link",
+      "name": "TP-Link",
+      "category": "网络/无线路由",
+      "url": "https://www.tp-link.com/cn/support/download/"
+    },
+    {
+      "id": "Cisco",
+      "name": "Cisco",
+      "category": "网络/交换机/安全",
+      "url": "https://www.cisco.com/c/zh_cn/support/index.html"
+    },
+    {
+      "id": "Fortinet",
+      "name": "Fortinet",
+      "category": "防火墙/VPN/安全",
+      "url": "https://docs.fortinet.com/"
+    },
+    {
+      "id": "Hikvision",
+      "name": "海康威视",
+      "category": "监控/NVR/摄像头",
+      "url": "https://www.hikvision.com/cn/support/"
+    },
+    {
+      "id": "Dahua",
+      "name": "大华",
+      "category": "监控/NVR/摄像头",
+      "url": "https://www.dahuatech.com/support"
+    },
+    {
+      "id": "Uniview",
+      "name": "宇视",
+      "category": "监控/NVR/摄像头",
+      "url": "https://www.uniview.com/support/"
+    },
+    {
+      "id": "HP",
+      "name": "HP",
+      "category": "电脑/打印/服务器",
+      "url": "https://support.hp.com/cn-zh"
+    },
+    {
+      "id": "Epson",
+      "name": "爱普生",
+      "category": "打印/扫描",
+      "url": "https://support.epson.net/"
+    },
+    {
+      "id": "Brother",
+      "name": "Brother",
+      "category": "打印/标签机",
+      "url": "https://support.brother.com/"
+    },
+    {
+      "id": "Canon",
+      "name": "Canon",
+      "category": "打印/扫描",
+      "url": "https://www.canon.com.cn/support/"
+    },
+    {
+      "id": "Zebra",
+      "name": "Zebra",
+      "category": "标签机/扫码枪/POS",
+      "url": "https://www.zebra.com/us/en/support-downloads.html"
+    },
+    {
+      "id": "Dell",
+      "name": "Dell",
+      "category": "电脑/服务器/存储",
+      "url": "https://www.dell.com/support/home/zh-cn"
+    },
+    {
+      "id": "Lenovo",
+      "name": "联想",
+      "category": "电脑/终端",
+      "url": "https://support.lenovo.com/cn/zh/"
+    },
+    {
+      "id": "HPE",
+      "name": "HPE",
+      "category": "服务器/存储",
+      "url": "https://support.hpe.com/hpesc/public/home"
+    },
+    {
+      "id": "Synology",
+      "name": "群晖",
+      "category": "NAS/备份/存储",
+      "url": "https://www.synology.com/zh-cn/support/download"
+    },
+    {
+      "id": "QNAP",
+      "name": "威联通",
+      "category": "NAS/备份/存储",
+      "url": "https://www.qnap.com/zh-cn/support"
+    },
+    {
+      "id": "Microsoft",
+      "name": "Microsoft",
+      "category": "Windows/Office/AD",
+      "url": "https://learn.microsoft.com/zh-cn/"
+    },
+    {
+      "id": "WPS",
+      "name": "WPS Office",
+      "category": "办公软件",
+      "url": "https://help.wps.com/"
+    },
+    {
+      "id": "APC",
+      "name": "APC / Schneider",
+      "category": "UPS/PDU/供电",
+      "url": "https://www.se.com/cn/zh/support/"
+    },
+    {
+      "id": "Eaton",
+      "name": "Eaton",
+      "category": "UPS/PDU/供电",
+      "url": "https://www.eaton.com.cn/support"
+    },
+    {
+      "id": "Ubiquiti",
+      "name": "Ubiquiti",
+      "category": "网络/无线/网关",
+      "url": "https://help.ui.com/"
+    },
+    {
+      "id": "Juniper",
+      "name": "Juniper",
+      "category": "网络/防火墙/路由",
+      "url": "https://support.juniper.net/support/"
+    },
+    {
+      "id": "PaloAlto",
+      "name": "Palo Alto Networks",
+      "category": "防火墙/VPN/安全",
+      "url": "https://docs.paloaltonetworks.com/"
+    },
+    {
+      "id": "VMware",
+      "name": "VMware by Broadcom",
+      "category": "虚拟化/服务器",
+      "url": "https://knowledge.broadcom.com/"
+    },
+    {
+      "id": "Acer",
+      "name": "Acer",
+      "category": "电脑/终端",
+      "url": "https://www.acer.com/cn-zh/support"
+    },
+    {
+      "id": "Asus",
+      "name": "ASUS",
+      "category": "电脑/终端/网络",
+      "url": "https://www.asus.com/cn/support/"
+    },
+    {
+      "id": "Apple",
+      "name": "Apple",
+      "category": "终端/移动设备",
+      "url": "https://support.apple.com/zh-cn"
+    },
+    {
+      "id": "Ricoh",
+      "name": "Ricoh",
+      "category": "打印/复合机/扫描",
+      "url": "https://www.ricoh.com.cn/support"
+    },
+    {
+      "id": "Kyocera",
+      "name": "Kyocera",
+      "category": "打印/复合机/扫描",
+      "url": "https://www.kyocera.com.cn/support/"
+    },
+    {
+      "id": "Honeywell",
+      "name": "Honeywell",
+      "category": "扫码枪/POS/工业终端",
+      "url": "https://automation.honeywell.com/us/en/support"
+    },
+    {
+      "id": "Datalogic",
+      "name": "Datalogic",
+      "category": "扫码枪/POS/工业终端",
+      "url": "https://www.datalogic.com/eng/support/"
+    }
+  ],
+  "documents": [
+    {
+      "id": "KB-OFFICE-START",
+      "title": "Office 与 WPS 无法启动、崩溃和加载项故障排查",
+      "category": "办公软件",
+      "brand": "Microsoft / WPS",
+      "models": [
+        "Word",
+        "Excel",
+        "PowerPoint",
+        "Outlook",
+        "WPS"
+      ],
+      "symptoms": [
+        "无法启动",
+        "崩溃",
+        "加载项异常",
+        "格式异常"
+      ],
+      "keywords": [
+        "office",
+        "wps",
+        "word",
+        "excel",
+        "ppt",
+        "outlook",
+        "加载项",
+        "崩溃"
+      ],
+      "source": "内置 SOP",
+      "reviewStatus": "已验证",
+      "updatedAt": "2026-07-25",
+      "content": "1. 记录错误窗口、发生时间和影响的文档，不直接删除模板或数据文件。\\n2. 在任务管理器确认 Office/WPS 进程已退出，再以安全模式验证是否为加载项问题。\\n3. 检查加载项、默认模板、文件关联、磁盘空间和应用程序事件日志。\\n4. 对模板、缓存、Outlook 配置文件或 PST/OST 的修复先做备份并给出回滚方式。\\n5. 官方资料：Microsoft Learn、WPS 帮助中心。"
+    },
+    {
+      "id": "KB-BROWSER-ENTERPRISE",
+      "title": "企业浏览器、代理、证书与业务网站兼容排查",
+      "category": "桌面",
+      "brand": "Microsoft",
+      "models": [
+        "Edge",
+        "Chrome",
+        "Internet Explorer mode"
+      ],
+      "symptoms": [
+        "业务网站打不开",
+        "证书错误",
+        "代理异常",
+        "下载失败"
+      ],
+      "keywords": [
+        "浏览器",
+        "代理",
+        "证书",
+        "edge",
+        "chrome",
+        "下载",
+        "兼容"
+      ],
+      "source": "内置 SOP",
+      "reviewStatus": "已验证",
+      "updatedAt": "2026-07-25",
+      "content": "1. 区分单网站、单用户还是全网问题，保留错误页和证书详情。\\n2. 检查系统代理、PAC、DNS、时间同步和证书链。\\n3. 核对浏览器扩展、企业站点兼容模式、下载目录权限和安全软件拦截记录。\\n4. 清理缓存或重置配置前导出书签与必要配置。\\n5. 验证时使用受控测试账号，不在知识库保存业务密码。"
+    },
+    {
+      "id": "KB-NAS-SHARE",
+      "title": "Windows 共享盘与 NAS 无法访问排查",
+      "category": "存储",
+      "brand": "Synology / QNAP / Microsoft",
+      "models": [
+        "SMB",
+        "映射网络驱动器"
+      ],
+      "symptoms": [
+        "共享盘打不开",
+        "凭据错误",
+        "映射盘断开"
+      ],
+      "keywords": [
+        "nas",
+        "smb",
+        "共享",
+        "映射盘",
+        "凭据",
+        "群晖",
+        "威联通"
+      ],
+      "source": "内置 SOP",
+      "reviewStatus": "已验证",
+      "updatedAt": "2026-07-25",
+      "content": "1. 确认目标 NAS/文件服务器可达，并区分网络、名称解析、权限和磁盘满四类问题。\\n2. 核对 SMB 版本、Windows 凭据管理器、映射路径和共享权限。\\n3. 不在日志或知识库写入用户名密码；删除凭据前提醒用户可能影响其他共享。\\n4. 修复后以最小权限账号验证读写，并记录恢复结果。"
+    },
+    {
+      "id": "KB-AD-GPO",
+      "title": "域登录、账户锁定与组策略刷新排查",
+      "category": "系统",
+      "brand": "Microsoft",
+      "models": [
+        "Active Directory",
+        "Group Policy"
+      ],
+      "symptoms": [
+        "无法登录域",
+        "账户锁定",
+        "组策略不生效"
+      ],
+      "keywords": [
+        "ad",
+        "域控",
+        "gpo",
+        "账户锁定",
+        "组策略",
+        "dns"
+      ],
+      "source": "内置 SOP",
+      "reviewStatus": "已验证",
+      "updatedAt": "2026-07-25",
+      "content": "1. 确认客户端 DNS 指向域控且系统时间偏差在 Kerberos 容忍范围内。\\n2. 检查账户锁定、密码过期、域连接状态、SYSVOL 和 NETLOGON。\\n3. 采集 gpresult、事件日志和网络快照，变更 GPO 前导出当前策略。\\n4. 使用 gpupdate 后验证策略实际生效范围。"
+    },
+    {
+      "id": "KB-PRINT-SCAN",
+      "title": "打印机、复合机与扫描仪离线、卡纸和扫描失败排查",
+      "category": "外设",
+      "brand": "HP / Epson / Brother / Canon / Ricoh / Kyocera",
+      "models": ["网络打印机", "USB 打印机", "复合机", "扫描仪"],
+      "symptoms": ["离线", "无法打印", "卡纸", "扫描失败", "驱动异常"],
+      "keywords": ["打印机", "扫描仪", "复合机", "spooler", "驱动", "离线", "卡纸"],
+      "source": "内置 SOP",
+      "reviewStatus": "已验证",
+      "updatedAt": "2026-07-25",
+      "content": "1. 先保留队列名称、错误码、IP、端口和驱动名称，确认故障是单机、单设备还是全网。\\n2. 网络设备依次检查 Ping、9100/515/631 端口、设备网页、纸张与耗材告警；USB 设备检查线缆、设备管理器与供电。\\n3. 先用“打印机巡检”确认 Spooler 和队列；清空队列会丢弃待打印任务，必须由现场人员确认。\\n4. 扫描失败还要检查扫描保存目录权限、SMB/邮件服务器与证书。\\n5. 官方支持按品牌入口下载匹配型号与 Windows 版本的驱动，不使用来源不明的驱动包。"
+    },
+    {
+      "id": "KB-POS-PERIPHERAL",
+      "title": "POS、扫码枪、标签机、小票机和加密狗环境排查",
+      "category": "业务系统",
+      "brand": "Zebra / Honeywell / Datalogic",
+      "models": ["扫码枪", "标签打印机", "小票机", "USB 加密狗", "串口设备"],
+      "symptoms": ["扫码无反应", "标签偏移", "小票不出", "加密狗未识别"],
+      "keywords": ["pos", "扫码枪", "标签机", "小票机", "加密狗", "串口", "usb"],
+      "source": "内置 SOP",
+      "reviewStatus": "已验证",
+      "updatedAt": "2026-07-25",
+      "content": "1. 记录业务软件版本、设备型号、接口类型和报错截图，先确认同门店其他终端是否正常。\\n2. USB 设备检查设备管理器、端口供电、驱动和 HID/串口模式；串口设备核对 COM 号、波特率、数据位、校验和停止位。\\n3. 标签机先打印自检页，核对纸张规格、传感器与打印浓度；小票机检查纸仓、网口/USB 与 Windows 队列。\\n4. 加密狗仅检查驱动、服务和设备识别状态，不导出许可证或敏感业务密钥。\\n5. 修复后以一笔非生产测试数据验证，不直接在真实交易中试错。"
+    },
+    {
+      "id": "KB-UPS-POWER",
+      "title": "UPS、PDU 与断电告警现场排查",
+      "category": "基础设施",
+      "brand": "APC / Schneider / Eaton",
+      "models": ["UPS", "PDU", "网络管理卡"],
+      "symptoms": ["电池告警", "市电中断", "负载过高", "设备反复重启"],
+      "keywords": ["ups", "pdu", "电池", "断电", "供电", "负载"],
+      "source": "内置 SOP",
+      "reviewStatus": "已验证",
+      "updatedAt": "2026-07-25",
+      "content": "1. 先确认人身和设备安全，禁止带电拆机；记录 UPS 面板告警、输入输出电压、负载和电池状态。\\n2. 区分市电、UPS、电池、PDU、插座和终端电源适配器问题，避免直接反复断电。\\n3. 对网络管理卡检查 IP、Web/SNMP 可达性和告警日志；确认关机策略不会影响业务。\\n4. 电池更换、负载迁移和断电演练应按厂商手册及变更流程执行。"
+    },
+    {
+      "id": "KB-HARDWARE-WARRANTY",
+      "title": "电脑硬件故障、蓝屏与保修报修准备",
+      "category": "桌面",
+      "brand": "Dell / Lenovo / HP / Acer / ASUS",
+      "models": ["笔记本", "台式机", "显示器", "扩展坞"],
+      "symptoms": ["蓝屏", "无法开机", "磁盘异常", "电池异常", "花屏"],
+      "keywords": ["硬件", "保修", "序列号", "蓝屏", "磁盘", "电池", "显示器"],
+      "source": "内置 SOP",
+      "reviewStatus": "已验证",
+      "updatedAt": "2026-07-25",
+      "content": "1. 先用“硬件资产采集”和“现场采集”保存品牌、型号、序列号、BIOS、磁盘健康和蓝屏事件，不要在未备份的机器上直接重装系统。\\n2. 排查内存、磁盘、供电、温度、外接设备和最近驱动/补丁变更；保留故障时间与复现条件。\\n3. 进入厂商官方支持页按序列号查询保修、诊断工具和对应驱动，报修时提供采集报告而非口述现象。\\n4. 涉及更换硬盘或主板前确认 BitLocker 恢复密钥、用户数据迁移和业务授权迁移。"
+    }
+  ]
+}

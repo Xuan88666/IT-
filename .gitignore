@@ -5,6 +5,7 @@ dist/
 !.env.example
 data/*
 !data/.gitkeep
+!data/knowledge-seed.json
 release/
 
 # 本地临时产物与调试文件

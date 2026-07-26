@@ -8,7 +8,7 @@
     "test": "node scripts/smoke-test.mjs",
     "test:auth-api": "node scripts/auth-api-contract-test.mjs",
     "test:rate-limit": "node scripts/rate-limit-test.mjs",
-    "check": "node --check server.mjs && node --check app.js && node --check enhancements.js && vite build && node scripts/smoke-test.mjs",
+    "check": "node --check server.mjs && node --check app.js && vite build && node scripts/smoke-test.mjs && node scripts/tool-catalog-test.mjs",
     "package:portable": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1"
   },
   "devDependencies": {
@@ -24,6 +24,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "lucide": "^0.525.0",
     "mysql2": "^3.23.1",
     "nodemailer": "^9.0.3",
     "pdf-parse": "^2.4.5",

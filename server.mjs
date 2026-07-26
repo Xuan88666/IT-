@@ -3,8 +3,9 @@ import https from 'node:https';
 import tls from 'node:tls';
 import { createRequire } from 'node:module';
 import { hostname, networkInterfaces } from 'node:os';
-import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { basename, extname, join, normalize } from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import net from 'node:net';
@@ -245,12 +246,55 @@ const AGENT_TOOLS = [
   ...extendedAgentTools,
 ];
 const agentToolAllowlist = new Set(['ping', 'dns_lookup', 'check_port', 'check_ports', 'check_arp', 'scan_subnet', 'web_probe', 'trace_route', 'get_network_info', 'get_network_snapshot', 'check_adapter_health', 'check_gateway', 'check_internet', 'get_system_info', 'get_system_errors', 'check_spooler', 'check_drivers', 'query_assets', 'check_certificate', 'diagnose_printer', 'diagnose_cctv', 'tcp_ping', 'mtu_probe', 'network_quality', 'wifi_scan', 'check_dhcp', 'process_list', 'service_list', 'login_history', 'shared_folders', 'scheduled_tasks', 'time_sync', 'check_audio', 'check_pos_peripherals', 'ask_user_check', 'conn_tracker', 'domain_whois', 'http_api_test', 'snmp_probe', 'websocket_test', 'ptr_lookup', 'tls_scan', 'traceroute_analyze', 'mitm_hints', 'netflow_listen', 'subnet_calc', 'route_table', 'firewall_status', 'port_occupancy', 'ip_info', 'dhcp_detect', 'host_discovery', 'loop_detection', 'speed_test', 'network_health', 'arp_table', 'port_service_probe', ...extendedAgentAllowlist]);
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const types = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.map': 'application/json; charset=utf-8', '.txt': 'text/plain; charset=utf-8',
+};
 const evidenceMimeTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8', '.log': 'text/plain; charset=utf-8', '.csv': 'text/csv; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 const send = (res, status, body, type = 'application/json; charset=utf-8') => {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
   res.end(Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body));
 };
+
+// 静态资源缓存：内存缓存 + gzip 预压缩 + ETag 协商缓存（304），避免每次请求都读盘并全量传输
+const staticCache = new Map();
+const STATIC_CACHE_MAX_FILE = 8 * 1024 * 1024;
+const STATIC_CACHE_MAX_ENTRIES = 128;
+const compressibleTypes = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.map', '.txt']);
+async function serveStaticFile(req, res, file) {
+  const info = await stat(file);
+  if (!info.isFile()) throw new Error('not a file');
+  const ext = extname(file).toLowerCase();
+  const etag = `W/"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`;
+  const baseHeaders = {
+    'Content-Type': types[ext] || 'application/octet-stream',
+    'Cache-Control': 'no-cache',
+    'ETag': etag,
+    'X-Content-Type-Options': 'nosniff',
+  };
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, baseHeaders);
+    return res.end();
+  }
+  let entry = staticCache.get(file);
+  if (!entry || entry.etag !== etag) {
+    const raw = await readFile(file);
+    entry = { etag, raw, gzip: null };
+    if (compressibleTypes.has(ext) && raw.length > 1024) entry.gzip = gzipSync(raw, { level: 6 });
+    if (raw.length <= STATIC_CACHE_MAX_FILE) {
+      if (staticCache.size >= STATIC_CACHE_MAX_ENTRIES) staticCache.delete(staticCache.keys().next().value);
+      staticCache.set(file, entry);
+    }
+  }
+  const acceptsGzip = /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''));
+  if (entry.gzip && acceptsGzip) {
+    res.writeHead(200, { ...baseHeaders, 'Content-Encoding': 'gzip', 'Content-Length': entry.gzip.length, 'Vary': 'Accept-Encoding' });
+    return res.end(entry.gzip);
+  }
+  res.writeHead(200, { ...baseHeaders, 'Content-Length': entry.raw.length, 'Vary': 'Accept-Encoding' });
+  return res.end(entry.raw);
+}
 const roleProfiles = {
   super:       { label: '超级管理员', permissions: ['data_read','data_write','tool_run','repair_run','launcher_run','ai_use','audit_read','backup_manage','user_manage','system_config','announce_manage'] },
   manager:     { label: '店长',       permissions: ['data_read','data_write','tool_run','repair_run','launcher_run','ai_use','audit_read','user_manage','announce_manage'] },
@@ -2511,7 +2555,14 @@ const app = express();
 const authJson = express.json({ limit: '1mb' });
 
 app.set('trust proxy', 'loopback');
+app.disable('x-powered-by');
 app.use(cors());
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
 
 app.post('/api/email/sendCode', authJson, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
@@ -2843,9 +2894,11 @@ app.use(async (req, res) => {
     try { requestPath = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname); } catch { return send(res, 400, 'Invalid path', 'text/plain'); }
     const file = normalize(join(root, requestPath));
     if (!file.startsWith(root)) return send(res, 403, 'Forbidden', 'text/plain');
-    try { return send(res, 200, await readFile(file), types[extname(file)] || 'application/octet-stream'); }
+    try { return await serveStaticFile(req, res, file); }
     catch {
-      if (!extname(requestPath)) return send(res, 200, await readFile(join(root, 'index.html')), types['.html']);
+      if (!extname(requestPath)) {
+        try { return await serveStaticFile(req, res, join(root, 'index.html')); } catch { /* 落到 404 */ }
+      }
       return send(res, 404, 'Not found', 'text/plain');
     }
   } catch (error) {

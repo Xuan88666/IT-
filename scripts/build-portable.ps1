@@ -16,15 +16,19 @@ $runtimeRoot = Join-Path $packageRoot 'runtime'
 New-Item -ItemType Directory -Force -Path $appRoot, $runtimeRoot, (Join-Path $appRoot 'data') | Out-Null
 
 $files = @(
-  'server.mjs', 'app.js', 'enhancements.js', 'index.html', 'styles.css', 'tools.css',
-  'chat-scroll.css', 'incident-link.css', 'knowledge.css', 'monitoring.css', 'topology.css',
-  'search.css', 'timeline.css', 'remote.css', 'package.json', 'package-lock.json', 'README.md', '.env.example'
+  'server.mjs', 'server.js', 'app.js', 'index.html', 'toolkit.css', 'bento.css',
+  'version-update.css', 'version-update.js', 'package.json', 'package-lock.json', 'README.md', '.env.example'
 )
 foreach ($file in $files) {
   $source = Join-Path $projectRoot $file
   if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $appRoot -Force }
 }
-Copy-Item -LiteralPath (Join-Path $projectRoot 'agent') -Destination $appRoot -Recurse -Force
+foreach ($dir in @('agent', 'server', 'vendor')) {
+  $source = Join-Path $projectRoot $dir
+  if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $appRoot -Recurse -Force }
+}
+$seedSource = Join-Path $projectRoot 'data\knowledge-seed.json'
+if (Test-Path -LiteralPath $seedSource) { Copy-Item -LiteralPath $seedSource -Destination (Join-Path $appRoot 'data') -Force }
 
 $nodePath = (Get-Command node.exe -ErrorAction Stop).Source
 Copy-Item -LiteralPath $nodePath -Destination (Join-Path $runtimeRoot 'node.exe') -Force
