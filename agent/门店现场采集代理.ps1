@@ -1,10 +1,10 @@
 <#
-OpsHub field collection agent.
+IT Ops Toolbox field collection agent.
 Read-only and one-shot: no service, remote control, or system changes.
 #>
 [CmdletBinding()]
 param(
-  [string]$OutputPath = (Join-Path $env:USERPROFILE ("Desktop\OpsHub-FieldCollect-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss')))
+  [string]$OutputPath = (Join-Path $env:USERPROFILE ("Desktop\IT-Ops-Toolbox-FieldCollect-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss')))
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,9 +35,9 @@ $printerService = Get-SafeValue {
 } $null
 
 $report = [ordered]@{
-  format = 'OpsHubAgentReport/1'
+  format = 'ITOpsToolboxAgentReport/1'
   collectedAt = (Get-Date).ToUniversalTime().ToString('o')
-  collector = [ordered]@{ name = 'OpsHub Field Collection Agent'; mode = 'one-shot-readonly'; version = '1.0' }
+  collector = [ordered]@{ name = 'IT Ops Toolbox Field Collection Agent'; mode = 'one-shot-readonly'; version = '1.0' }
   computer = Get-SafeValue {
     $os = Get-CimInstance Win32_OperatingSystem
     $system = Get-CimInstance Win32_ComputerSystem
@@ -66,4 +66,4 @@ if ($directory) { New-Item -ItemType Directory -Force -Path $directory | Out-Nul
 $json = $report | ConvertTo-Json -Depth 8
 [System.IO.File]::WriteAllText($OutputPath, $json, [System.Text.UTF8Encoding]::new($false))
 Write-Host "Collection complete: $OutputPath"
-Write-Host 'Import this JSON in OpsHub AI via Import Log, or attach it to an on-site work order as evidence.'
+Write-Host 'Import this JSON in IT Ops Toolbox, or attach it to an on-site work order as evidence.'

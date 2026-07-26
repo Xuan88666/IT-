@@ -1,0 +1,2680 @@
+/* ============================================================
+ * 3D 动画效果可视化系统 - 运维百宝箱高级版
+ * 包含：3D 透视、卡片倾斜、粒子背景、立体图表、3D 拓扑、AI 流式效果
+ * ============================================================ */
+
+/* ===== 3D 根变量 ===== */
+:root {
+  --3d-perspective: 1200px;
+  --3d-perspective-near: 800px;
+  --3d-perspective-far: 2000px;
+  --3d-tilt-max: 12deg;
+  --3d-tilt-depth: 40px;
+  --3d-transition: cubic-bezier(0.23, 1, 0.32, 1);
+  --3d-glow-teal: 0 0 40px rgba(13, 148, 136, 0.25);
+  --3d-glow-blue: 0 0 40px rgba(59, 130, 246, 0.25);
+  --3d-shadow-layer-1: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --3d-shadow-layer-2: 0 4px 8px rgba(15, 23, 42, 0.06);
+  --3d-shadow-layer-3: 0 12px 24px rgba(15, 23, 42, 0.08);
+  --3d-shadow-layer-4: 0 24px 48px rgba(15, 23, 42, 0.12);
+  --3d-shadow-elevated: 0 32px 64px rgba(15, 23, 42, 0.16);
+}
+
+/* ===== 3D 透视容器 ===== */
+.bento-3d-scene {
+  perspective: var(--3d-perspective);
+  perspective-origin: 50% 50%;
+  transform-style: preserve-3d;
+}
+
+.bento-3d-stage {
+  transform-style: preserve-3d;
+  position: relative;
+}
+
+/* ===== 3D 卡片基础 ===== */
+.bento-card {
+  transform-style: preserve-3d;
+  transition: transform 0.4s var(--3d-transition),
+              box-shadow 0.4s var(--3d-transition),
+              border-color 0.3s ease;
+  will-change: transform;
+}
+
+/* 3D 卡片倾斜效果（由 JS 驱动 mousemove） */
+.bento-card.bento-3d-tilt {
+  transform: rotateX(var(--3d-rot-x, 0deg)) rotateY(var(--3d-rot-y, 0deg)) translateZ(0);
+}
+
+.bento-card.bento-3d-tilt:hover {
+  box-shadow: var(--3d-shadow-layer-3), var(--3d-shadow-layer-4);
+}
+
+/* 卡片内部 3D 层 */
+.bento-card-head,
+.bento-metric-row,
+.bento-tool-grid,
+.bento-incident-list,
+.bento-chart-area {
+  transform: translateZ(20px);
+}
+
+.bento-card-title {
+  transform: translateZ(30px);
+}
+
+.bento-metric-value {
+  transform: translateZ(40px);
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+/* ===== 3D 卡片悬浮光泽 ===== */
+.bento-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--3d-mx, 50%) var(--3d-my, 50%),
+    rgba(255, 255, 255, 0.4) 0%,
+    transparent 50%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+
+.bento-card:hover::after {
+  opacity: 1;
+}
+
+/* ===== 3D 指标卡片翻转 ===== */
+.bento-metric-block {
+  transform-style: preserve-3d;
+  transition: transform 0.5s var(--3d-transition);
+  cursor: pointer;
+}
+
+.bento-metric-block:hover {
+  transform: translateZ(25px) scale(1.02);
+}
+
+.bento-metric-block::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: var(--bento-radius-md);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(59, 130, 246, 0.08));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+}
+
+.bento-metric-block:hover::before {
+  opacity: 1;
+}
+
+/* 指标值脉冲动画 */
+@keyframes metricPulse {
+  0%, 100% { transform: translateZ(40px) scale(1); }
+  50% { transform: translateZ(50px) scale(1.05); }
+}
+
+.bento-metric-value {
+  animation: metricPulse 4s ease-in-out infinite;
+}
+
+/* ===== 3D 图表立体化 ===== */
+.bento-chart-svg {
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 8px 16px rgba(13, 148, 136, 0.15));
+}
+
+.bento-chart-area {
+  transform-style: preserve-3d;
+  perspective: 600px;
+}
+
+.bento-chart-svg .bento-chart-line {
+  filter: drop-shadow(0 2px 4px rgba(13, 148, 136, 0.3));
+}
+
+.bento-chart-svg .bento-chart-dot {
+  animation: chartDotPulse 2s ease-in-out infinite;
+}
+
+@keyframes chartDotPulse {
+  0%, 100% { 
+    r: 3.5;
+    filter: drop-shadow(0 0 4px rgba(13, 148, 136, 0.6));
+  }
+  50% { 
+    r: 5;
+    filter: drop-shadow(0 0 12px rgba(13, 148, 136, 0.9));
+  }
+}
+
+/* ===== 粒子背景 ===== */
+.bento-particles-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.bento-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.4), transparent);
+  animation: particleFloat linear infinite;
+  opacity: 0.6;
+}
+
+.bento-particle.particle-blue {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.4), transparent);
+}
+
+.bento-particle.particle-purple {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.3), transparent);
+}
+
+@keyframes particleFloat {
+  0% {
+    transform: translateY(100vh) translateX(0) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+    transform: translateY(90vh) translateX(10px) scale(1);
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-10vh) translateX(60px) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* ===== 3D 网格背景 ===== */
+.bento-grid-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: 
+    linear-gradient(rgba(13, 148, 136, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 148, 136, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: gridMove 20s linear infinite;
+  opacity: 0.6;
+}
+
+@keyframes gridMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
+}
+
+/* ===== 3D 侧边栏立体效果 ===== */
+.bento-sidebar {
+  transform-style: preserve-3d;
+  box-shadow: 
+    1px 0 0 var(--bento-border-light),
+    4px 0 12px rgba(15, 23, 42, 0.03),
+    8px 0 24px rgba(15, 23, 42, 0.02);
+  position: relative;
+  z-index: 10;
+}
+
+.bento-sidebar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, 
+    rgba(13, 148, 136, 0.02) 0%, 
+    transparent 30%, 
+    transparent 70%, 
+    rgba(59, 130, 246, 0.02) 100%);
+  pointer-events: none;
+}
+
+.bento-sb-item {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-sb-item:hover {
+  transform: translateX(2px) translateZ(10px);
+}
+
+.bento-sb-item.active {
+  transform: translateX(2px) translateZ(15px);
+  box-shadow: 
+    0 4px 12px rgba(13, 148, 136, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.bento-sb-item.active::before {
+  background: linear-gradient(180deg, var(--bento-primary), var(--bento-primary-hover));
+  box-shadow: 0 0 12px rgba(13, 148, 136, 0.6);
+  height: 22px;
+}
+
+/* ===== 3D 顶栏 ===== */
+.bento-topbar {
+  transform-style: preserve-3d;
+  position: relative;
+  z-index: 5;
+  background: linear-gradient(180deg, 
+    rgba(255, 255, 255, 0.95) 0%, 
+    rgba(248, 250, 252, 0.95) 100%);
+  backdrop-filter: blur(10px);
+  box-shadow: 
+    0 1px 0 var(--bento-border-light),
+    0 4px 12px rgba(15, 23, 42, 0.02);
+}
+
+.bento-tab {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-tab.active {
+  transform: translateZ(8px);
+  box-shadow: 
+    var(--bento-shadow-sm),
+    0 4px 12px rgba(15, 23, 42, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* ===== 3D 工具卡片 ===== */
+.bento-tool-item {
+  transform-style: preserve-3d;
+  transition: all 0.35s var(--3d-transition);
+}
+
+.bento-tool-item:hover {
+  transform: translateY(-3px) translateZ(20px) rotateX(5deg);
+  box-shadow: 
+    var(--3d-shadow-layer-2),
+    var(--3d-shadow-layer-3);
+}
+
+.bento-tool-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, 
+    rgba(13, 148, 136, 0.08) 0%, 
+    transparent 50%, 
+    rgba(59, 130, 246, 0.08) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.bento-tool-item:hover::after {
+  opacity: 1;
+}
+
+.bento-tool-item-icon {
+  transition: transform 0.4s var(--3d-transition);
+}
+
+.bento-tool-item:hover .bento-tool-item-icon {
+  transform: translateZ(30px) scale(1.15) rotateY(180deg);
+}
+
+/* ===== 3D 告警卡片 ===== */
+.bento-incident-item {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+  position: relative;
+}
+
+.bento-incident-item:hover {
+  transform: translateX(4px) translateZ(15px);
+}
+
+.bento-incident-item.critical {
+  box-shadow: 
+    inset 3px 0 0 var(--bento-red),
+    0 4px 12px rgba(239, 68, 68, 0.15);
+}
+
+.bento-incident-item.critical::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, 
+    rgba(239, 68, 68, 0.08) 0%, 
+    transparent 30%);
+  pointer-events: none;
+  animation: criticalPulse 2s ease-in-out infinite;
+}
+
+@keyframes criticalPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.bento-p1-badge {
+  transform: translateZ(25px);
+  box-shadow: 
+    0 2px 8px rgba(239, 68, 68, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  animation: p1BadgeGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes p1BadgeGlow {
+  0%, 100% { 
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  50% { 
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* ===== 3D 网络拓扑可视化 ===== */
+.bento-topology-3d {
+  perspective: 1000px;
+  perspective-origin: 50% 30%;
+  transform-style: preserve-3d;
+  width: 100%;
+  height: 480px;
+  position: relative;
+  overflow: hidden;
+  background: 
+    radial-gradient(ellipse at 50% 0%, rgba(13, 148, 136, 0.06), transparent 60%),
+    radial-gradient(ellipse at 0% 100%, rgba(59, 130, 246, 0.05), transparent 60%),
+    linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
+}
+
+.bento-topology-stage {
+  transform-style: preserve-3d;
+  transform: rotateX(55deg) rotateZ(-45deg) scale(0.85);
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transition: transform 0.6s var(--3d-transition);
+}
+
+.bento-topology-node {
+  position: absolute;
+  transform-style: preserve-3d;
+  transition: all 0.4s var(--3d-transition);
+  cursor: pointer;
+}
+
+.bento-topology-node-core {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #ffffff, #f1f5f9);
+  border: 1px solid var(--bento-border);
+  box-shadow: 
+    0 8px 16px rgba(15, 23, 42, 0.1),
+    0 16px 32px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transform: translateZ(20px);
+  transition: all 0.4s var(--3d-transition);
+  position: relative;
+}
+
+.bento-topology-node:hover .bento-topology-node-core {
+  transform: translateZ(40px) scale(1.1);
+  box-shadow: 
+    0 12px 24px rgba(13, 148, 136, 0.2),
+    0 24px 48px rgba(15, 23, 42, 0.12);
+}
+
+.bento-topology-node.type-router .bento-topology-node-core {
+  background: linear-gradient(135deg, #0d9488, #0f766e);
+  color: #fff;
+}
+
+.bento-topology-node.type-switch .bento-topology-node-core {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+}
+
+.bento-topology-node.type-server .bento-topology-node-core {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: #fff;
+}
+
+.bento-topology-node.type-ap .bento-topology-node-core {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+}
+
+.bento-topology-node.type-camera .bento-topology-node-core {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+}
+
+.bento-topology-node.alert .bento-topology-node-core {
+  animation: nodeAlertPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes nodeAlertPulse {
+  0%, 100% { 
+    box-shadow: 
+      0 8px 16px rgba(239, 68, 68, 0.3),
+      0 16px 32px rgba(239, 68, 68, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+  50% { 
+    box-shadow: 
+      0 12px 24px rgba(239, 68, 68, 0.6),
+      0 24px 48px rgba(239, 68, 68, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8),
+      0 0 40px rgba(239, 68, 68, 0.5);
+  }
+}
+
+.bento-topology-node-label {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(30px) rotateZ(45deg) rotateX(-55deg);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--bento-text);
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 3px 8px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--bento-border-light);
+}
+
+/* 拓扑连接线 */
+.bento-topology-link {
+  position: absolute;
+  height: 2px;
+  background: linear-gradient(90deg, 
+    rgba(13, 148, 136, 0.3), 
+    rgba(59, 130, 246, 0.3));
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+.bento-topology-link::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(13, 148, 136, 0.8), 
+    transparent);
+  background-size: 30% 100%;
+  background-repeat: no-repeat;
+  animation: dataFlow 2s linear infinite;
+}
+
+@keyframes dataFlow {
+  0% { background-position: -30% 0; }
+  100% { background-position: 130% 0; }
+}
+
+.bento-topology-link.alert {
+  background: linear-gradient(90deg, 
+    rgba(239, 68, 68, 0.4), 
+    rgba(239, 68, 68, 0.2));
+}
+
+.bento-topology-link.alert::before {
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(239, 68, 68, 0.9), 
+    transparent);
+  background-size: 30% 100%;
+  background-repeat: no-repeat;
+}
+
+/* 拓扑网格地面 */
+.bento-topology-grid-floor {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(13, 148, 136, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 148, 136, 0.08) 1px, transparent 1px);
+  background-size: 50px 50px;
+  transform: translateZ(-2px);
+  opacity: 0.5;
+}
+
+/* 拓扑控制按钮 */
+.bento-topology-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 20;
+  transform-style: preserve-3d;
+}
+
+.bento-topology-ctrl-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--bento-border);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--bento-text-secondary);
+  transition: all 0.25s var(--3d-transition);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.bento-topology-ctrl-btn:hover {
+  color: var(--bento-primary);
+  border-color: var(--bento-primary);
+  transform: translateZ(10px);
+  box-shadow: 0 8px 20px rgba(13, 148, 136, 0.2);
+}
+
+/* 拓扑图例 */
+.bento-topology-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--bento-border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  z-index: 20;
+}
+
+.bento-topology-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--bento-text-secondary);
+}
+
+.bento-topology-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* ===== AI 排障 3D 动画 ===== */
+.bento-chat-container {
+  transform-style: preserve-3d;
+  position: relative;
+}
+
+.bento-chat-message {
+  transform-style: preserve-3d;
+  animation: chatMessageIn 0.5s var(--3d-transition) backwards;
+}
+
+@keyframes chatMessageIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) translateZ(-50px) rotateX(15deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateZ(0) rotateX(0);
+  }
+}
+
+.bento-chat-message.bot .bento-chat-avatar {
+  background: linear-gradient(135deg, var(--bento-primary), var(--bento-primary-hover));
+  box-shadow: 
+    0 4px 12px rgba(13, 148, 136, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateZ(15px);
+}
+
+.bento-chat-message.user .bento-chat-avatar {
+  background: linear-gradient(135deg, #64748b, #475569);
+  box-shadow: 
+    0 4px 12px rgba(100, 116, 139, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateZ(15px);
+}
+
+.bento-chat-content {
+  transform: translateZ(10px);
+  transition: transform 0.3s var(--3d-transition);
+}
+
+.bento-chat-message:hover .bento-chat-content {
+  transform: translateZ(20px);
+}
+
+/* AI 思考动画 */
+.bento-ai-thinking {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px;
+  align-items: center;
+}
+
+.bento-ai-thinking-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bento-primary);
+  animation: thinkingBounce 1.4s ease-in-out infinite;
+}
+
+.bento-ai-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.bento-ai-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes thinkingBounce {
+  0%, 80%, 100% {
+    transform: scale(0.6) translateZ(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2) translateZ(20px);
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(13, 148, 136, 0.6);
+  }
+}
+
+/* AI 思考脑波动画 */
+.bento-ai-brain-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.bento-ai-brain-wave-bar {
+  width: 3px;
+  background: linear-gradient(180deg, var(--bento-primary), var(--bento-blue));
+  border-radius: 2px;
+  animation: brainWave 1s ease-in-out infinite;
+}
+
+.bento-ai-brain-wave-bar:nth-child(1) { height: 8px; animation-delay: 0s; }
+.bento-ai-brain-wave-bar:nth-child(2) { height: 14px; animation-delay: 0.1s; }
+.bento-ai-brain-wave-bar:nth-child(3) { height: 20px; animation-delay: 0.2s; }
+.bento-ai-brain-wave-bar:nth-child(4) { height: 14px; animation-delay: 0.3s; }
+.bento-ai-brain-wave-bar:nth-child(5) { height: 8px; animation-delay: 0.4s; }
+
+@keyframes brainWave {
+  0%, 100% { transform: scaleY(0.5); opacity: 0.6; }
+  50% { transform: scaleY(1.5); opacity: 1; }
+}
+
+/* AI 工具调用轨迹 */
+.bento-ai-tool-trace {
+  margin: 8px 0;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, 
+    rgba(13, 148, 136, 0.04), 
+    rgba(59, 130, 246, 0.04));
+  border: 1px solid rgba(13, 148, 136, 0.15);
+  border-radius: 12px;
+  font-size: 12px;
+  transform-style: preserve-3d;
+  animation: toolTraceIn 0.5s var(--3d-transition) backwards;
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-ai-tool-trace::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--bento-primary), var(--bento-blue));
+  animation: traceBarFlow 2s linear infinite;
+}
+
+@keyframes traceBarFlow {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 20px; }
+}
+
+@keyframes toolTraceIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px) translateZ(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) translateZ(0);
+  }
+}
+
+.bento-ai-tool-trace-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--bento-text);
+}
+
+.bento-ai-tool-trace-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--bento-primary);
+  animation: toolIconSpin 2s linear infinite;
+}
+
+@keyframes toolIconSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.bento-ai-tool-trace-status {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--bento-primary);
+  font-weight: 600;
+}
+
+.bento-ai-tool-trace-status.running {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--bento-amber);
+  animation: statusBlink 1s ease-in-out infinite;
+}
+
+@keyframes statusBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* AI 输入区域 3D */
+.bento-chat-input-area {
+  transform-style: preserve-3d;
+  box-shadow: 
+    0 -4px 12px rgba(15, 23, 42, 0.03),
+    0 -8px 24px rgba(15, 23, 42, 0.02);
+}
+
+.bento-chat-input {
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-chat-input:focus {
+  transform: translateZ(8px);
+  box-shadow: 
+    0 0 0 3px rgba(13, 148, 136, 0.1),
+    0 8px 16px rgba(13, 148, 136, 0.1);
+}
+
+.bento-primary-btn {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-primary-btn:hover {
+  transform: translateY(-1px) translateZ(10px);
+  box-shadow: 
+    0 4px 12px rgba(13, 148, 136, 0.3),
+    0 8px 20px rgba(13, 148, 136, 0.15);
+}
+
+.bento-primary-btn:active {
+  transform: translateY(0) translateZ(4px);
+}
+
+/* 按钮光泽扫过 */
+.bento-primary-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.3), 
+    transparent);
+  transition: left 0.6s ease;
+}
+
+.bento-primary-btn:hover::before {
+  left: 100%;
+}
+
+/* ===== 页面切换 3D 过渡 ===== */
+.bento-main {
+  animation: pageIn3D 0.5s var(--3d-transition);
+  transform-style: preserve-3d;
+}
+
+@keyframes pageIn3D {
+  0% {
+    opacity: 0;
+    transform: translateZ(-80px) rotateY(8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateZ(0) rotateY(0);
+  }
+}
+
+.bento-page-header {
+  transform-style: preserve-3d;
+  animation: headerIn3D 0.6s var(--3d-transition) 0.1s backwards;
+}
+
+@keyframes headerIn3D {
+  0% {
+    opacity: 0;
+    transform: translateY(-15px) translateZ(-40px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateZ(0);
+  }
+}
+
+/* ===== 3D 浮动 AI 通知 ===== */
+.bento-ai-float {
+  transform-style: preserve-3d;
+  animation: aiFloatIn 0.6s var(--3d-transition) 0.5s backwards,
+             aiFloatBreath 4s ease-in-out infinite 1s;
+}
+
+@keyframes aiFloatIn {
+  0% {
+    opacity: 0;
+    transform: translateY(40px) translateZ(-50px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateZ(0) scale(1);
+  }
+}
+
+@keyframes aiFloatBreath {
+  0%, 100% { 
+    transform: translateY(0) translateZ(0);
+    box-shadow: 0 8px 20px rgba(13, 148, 136, 0.2);
+  }
+  50% { 
+    transform: translateY(-3px) translateZ(15px);
+    box-shadow: 0 12px 28px rgba(13, 148, 136, 0.35);
+  }
+}
+
+/* ===== 3D 图标按钮 ===== */
+.bento-icon-btn {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-icon-btn:hover {
+  transform: translateY(-2px) translateZ(10px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.1);
+}
+
+.bento-icon-btn .dot-notif {
+  animation: notifPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes notifPulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+  }
+  50% { 
+    transform: scale(1.2);
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+}
+
+/* ===== 3D 搜索框 ===== */
+.bento-search {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-search:focus-within {
+  transform: translateZ(8px);
+  box-shadow: 
+    0 0 0 3px rgba(13, 148, 136, 0.1),
+    0 6px 14px rgba(13, 148, 136, 0.08);
+  border-color: var(--bento-primary);
+}
+
+/* ===== 3D 头像 ===== */
+.bento-sb-avatar {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+  box-shadow: 
+    0 4px 10px rgba(15, 23, 42, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.bento-sb-avatar:hover {
+  transform: scale(1.1) translateZ(15px);
+  box-shadow: 
+    0 6px 16px rgba(15, 23, 42, 0.2),
+    0 0 0 3px rgba(13, 148, 136, 0.2);
+}
+
+/* ===== 3D Modal ===== */
+.bento-overlay {
+  animation: overlayIn 0.3s ease;
+  perspective: 1000px;
+}
+
+@keyframes overlayIn {
+  0% { opacity: 0; backdrop-filter: blur(0); }
+  100% { opacity: 1; backdrop-filter: blur(4px); }
+}
+
+.bento-overlay > * {
+  animation: modalIn3D 0.4s var(--3d-transition);
+  transform-style: preserve-3d;
+}
+
+@keyframes modalIn3D {
+  0% {
+    opacity: 0;
+    transform: translateZ(-100px) rotateX(15deg) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateZ(0) rotateX(0) scale(1);
+  }
+}
+
+/* ===== 3D 工具输出面板 ===== */
+.bento-tool-output {
+  transform-style: preserve-3d;
+  animation: outputIn3D 0.4s var(--3d-transition);
+}
+
+@keyframes outputIn3D {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) translateZ(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateZ(0);
+  }
+}
+
+/* ===== 3D 加载动画 ===== */
+.bento-3d-loader {
+  width: 48px;
+  height: 48px;
+  position: relative;
+  transform-style: preserve-3d;
+  animation: loaderRotate 2s linear infinite;
+}
+
+.bento-3d-loader-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+}
+
+.bento-3d-loader-ring:nth-child(1) {
+  border-top-color: var(--bento-primary);
+  animation: ring1 1.5s linear infinite;
+}
+
+.bento-3d-loader-ring:nth-child(2) {
+  border-right-color: var(--bento-blue);
+  animation: ring2 1.5s linear infinite;
+  inset: 6px;
+}
+
+.bento-3d-loader-ring:nth-child(3) {
+  border-bottom-color: var(--bento-purple);
+  animation: ring3 1.5s linear infinite;
+  inset: 12px;
+}
+
+@keyframes loaderRotate {
+  0% { transform: rotateX(20deg) rotateY(0); }
+  100% { transform: rotateX(20deg) rotateY(360deg); }
+}
+
+@keyframes ring1 {
+  0% { transform: rotateZ(0); }
+  100% { transform: rotateZ(360deg); }
+}
+
+@keyframes ring2 {
+  0% { transform: rotateZ(120deg); }
+  100% { transform: rotateZ(480deg); }
+}
+
+@keyframes ring3 {
+  0% { transform: rotateZ(240deg); }
+  100% { transform: rotateZ(600deg); }
+}
+
+/* ===== 3D 空状态 ===== */
+.bento-empty-state {
+  transform-style: preserve-3d;
+  animation: emptyStateFloat 3s ease-in-out infinite;
+}
+
+@keyframes emptyStateFloat {
+  0%, 100% { transform: translateY(0) translateZ(0); }
+  50% { transform: translateY(-8px) translateZ(20px); }
+}
+
+.bento-empty-state svg,
+.bento-empty-state i {
+  filter: drop-shadow(0 8px 16px rgba(13, 148, 136, 0.15));
+}
+
+/* ===== 3D 标签徽章 ===== */
+.bento-env-badge {
+  transform: translateZ(10px);
+  box-shadow: 
+    0 2px 6px rgba(16, 185, 129, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.bento-role-badge {
+  transform: translateZ(8px);
+  box-shadow: 
+    0 2px 6px rgba(15, 23, 42, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* ===== 3D 卡片图标 ===== */
+.bento-card-icon {
+  transform: translateZ(25px);
+  transition: transform 0.4s var(--3d-transition);
+  filter: drop-shadow(0 2px 4px rgba(13, 148, 136, 0.2));
+}
+
+.bento-card:hover .bento-card-icon {
+  transform: translateZ(40px) scale(1.2) rotateY(180deg);
+}
+
+/* ===== 3D 卡片操作按钮 ===== */
+.bento-card-action {
+  transform: translateZ(15px);
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-card-action:hover {
+  transform: translateZ(25px) translateX(3px);
+}
+
+/* ===== 滚动条 3D 样式 ===== */
+.bento-main::-webkit-scrollbar,
+.bento-chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.bento-main::-webkit-scrollbar-track,
+.bento-chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bento-main::-webkit-scrollbar-thumb,
+.bento-chat-messages::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, 
+    rgba(13, 148, 136, 0.3), 
+    rgba(59, 130, 246, 0.3));
+  border-radius: 9999px;
+}
+
+.bento-main::-webkit-scrollbar-thumb:hover,
+.bento-chat-messages::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, 
+    rgba(13, 148, 136, 0.5), 
+    rgba(59, 130, 246, 0.5));
+}
+
+/* ===== 性能优化：减少动画 ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .bento-particles-bg,
+  .bento-grid-bg {
+    display: none;
+  }
+}
+
+/* ===== 响应式：移动端降低 3D 强度 ===== */
+@media (max-width: 768px) {
+  :root {
+    --3d-tilt-max: 6deg;
+    --3d-tilt-depth: 20px;
+  }
+
+  .bento-card.bento-3d-tilt:hover {
+    transform: none;
+  }
+
+  .bento-metric-value {
+    animation: none;
+  }
+
+  .bento-particles-bg .bento-particle {
+    display: none;
+  }
+
+  .bento-particles-bg .bento-particle:nth-child(-n+10) {
+    display: block;
+  }
+}
+
+/* ===== 3D 登录卡片 ===== */
+.bento-auth-shell.bento-3d-scene {
+  perspective: 1500px;
+}
+
+.bento-auth-card.bento-3d-stage {
+  transform-style: preserve-3d;
+  animation: authCardIn3D 0.8s var(--3d-transition);
+  box-shadow:
+    0 20px 40px rgba(15, 23, 42, 0.12),
+    0 40px 80px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+@keyframes authCardIn3D {
+  0% {
+    opacity: 0;
+    transform: translateZ(-100px) rotateY(10deg) rotateX(5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateZ(0) rotateY(0) rotateX(0);
+  }
+}
+
+.bento-auth-logo,
+.bento-auth-welcome,
+.bento-auth-form,
+.bento-auth-features {
+  transform: translateZ(20px);
+}
+
+.bento-auth-logo-mark {
+  transform: translateZ(40px);
+  box-shadow:
+    0 8px 20px rgba(13, 148, 136, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.bento-auth-submit {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+  box-shadow:
+    0 6px 16px rgba(13, 148, 136, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.bento-auth-submit:hover {
+  transform: translateY(-2px) translateZ(15px);
+  box-shadow:
+    0 10px 24px rgba(13, 148, 136, 0.4),
+    0 16px 32px rgba(13, 148, 136, 0.2);
+}
+
+.bento-auth-input-wrap {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-auth-input:focus {
+  transform: translateZ(6px);
+  box-shadow:
+    0 0 0 3px rgba(13, 148, 136, 0.12),
+    0 6px 14px rgba(13, 148, 136, 0.08);
+}
+
+/* 登录页装饰图标 3D 浮动 */
+.bento-auth-deco {
+  transform-style: preserve-3d;
+  animation: authDecoFloat 6s ease-in-out infinite;
+}
+
+.bento-auth-deco-1 { animation-delay: 0s; }
+.bento-auth-deco-2 { animation-delay: 1.5s; }
+.bento-auth-deco-3 { animation-delay: 3s; }
+.bento-auth-deco-4 { animation-delay: 4.5s; }
+
+@keyframes authDecoFloat {
+  0%, 100% {
+    transform: translateY(0) translateZ(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) translateZ(30px) rotate(8deg);
+  }
+}
+
+.bento-auth-feature {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-auth-feature:hover {
+  transform: translateY(-3px) translateZ(15px);
+}
+
+.bento-auth-feature-icon {
+  transform: translateZ(10px);
+  transition: transform 0.4s var(--3d-transition);
+}
+
+.bento-auth-feature:hover .bento-auth-feature-icon {
+  transform: translateZ(25px) scale(1.15) rotateY(180deg);
+}
+
+/* ===== 3D 工具页面（网络诊断等） ===== */
+.bento-tool-config,
+.bento-tool-output {
+  transform-style: preserve-3d;
+}
+
+.bento-tool-input {
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-tool-input:focus {
+  transform: translateZ(6px);
+  box-shadow:
+    0 0 0 3px rgba(13, 148, 136, 0.1),
+    0 6px 14px rgba(13, 148, 136, 0.08);
+}
+
+/* ===== 3D 知识库卡片 ===== */
+.bento-knowledge-card {
+  transform-style: preserve-3d;
+  transition: all 0.4s var(--3d-transition);
+}
+
+.bento-knowledge-card:hover {
+  transform: translateY(-4px) translateZ(20px);
+  box-shadow:
+    var(--3d-shadow-layer-3),
+    var(--3d-shadow-layer-4);
+}
+
+/* ===== 3D 工单/资产列表项 ===== */
+.bento-list-item {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-list-item:hover {
+  transform: translateX(4px) translateZ(10px);
+  box-shadow: var(--3d-shadow-layer-2);
+}
+
+/* ===== 3D Toast 通知 ===== */
+.bento-toast {
+  transform-style: preserve-3d;
+  animation: toastIn3D 0.5s var(--3d-transition);
+  box-shadow:
+    0 12px 24px rgba(15, 23, 42, 0.15),
+    0 24px 48px rgba(15, 23, 42, 0.08);
+}
+
+@keyframes toastIn3D {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) translateZ(-50px) rotateX(15deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateZ(0) rotateX(0);
+  }
+}
+
+/* ===== 3D 滑块验证 ===== */
+.bento-slider-captcha {
+  transform-style: preserve-3d;
+  transition: all 0.3s var(--3d-transition);
+}
+
+.bento-slider-captcha.verified {
+  transform: translateZ(10px);
+  box-shadow:
+    0 0 0 3px rgba(16, 185, 129, 0.15),
+    0 8px 20px rgba(16, 185, 129, 0.1);
+}
+
+.bento-slider-handle {
+  transform-style: preserve-3d;
+  transition: transform 0.2s var(--3d-transition);
+  box-shadow:
+    0 4px 10px rgba(15, 23, 42, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.bento-slider-captcha:hover .bento-slider-handle {
+  transform: translateZ(8px);
+}
+
+/* ===== 主内容区 3D 透视容器 ===== */
+.bento-app.bento-authed {
+  perspective: var(--3d-perspective-far);
+}
+
+.bento-grid {
+  transform-style: preserve-3d;
+}
+
+/* ===== 3D 数字滚动效果 ===== */
+.bento-metric-value {
+  display: inline-block;
+}
+
+/* ===== 3D 状态徽章 ===== */
+.bento-status-badge {
+  transform: translateZ(8px);
+  box-shadow:
+    0 2px 6px rgba(15, 23, 42, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* ===== 高性能：GPU 加速 ===== */
+.bento-card,
+.bento-tool-item,
+.bento-incident-item,
+.bento-sb-item,
+.bento-topology-node,
+.bento-chat-message {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* ============================================================
+ * 高级 3D 可视化系统 v2.0 - 极光/全息/神经网络/磁吸/液态
+ * ============================================================ */
+
+/* ===== 极光液态背景 ===== */
+.bento-aurora-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.bento-aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+.bento-aurora-blob.blob-teal {
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.45), transparent 70%);
+  top: -15%;
+  left: -8%;
+  animation: auroraDrift1 22s ease-in-out infinite;
+}
+
+.bento-aurora-blob.blob-blue {
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.4), transparent 70%);
+  bottom: -12%;
+  right: -6%;
+  animation: auroraDrift2 26s ease-in-out infinite;
+}
+
+.bento-aurora-blob.blob-violet {
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.3), transparent 70%);
+  top: 40%;
+  left: 55%;
+  animation: auroraDrift3 30s ease-in-out infinite;
+}
+
+.bento-aurora-blob.blob-amber {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.22), transparent 70%);
+  top: 60%;
+  left: 15%;
+  animation: auroraDrift4 24s ease-in-out infinite;
+}
+
+@keyframes auroraDrift1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(80px, 60px) scale(1.15); }
+  66% { transform: translate(-40px, 120px) scale(0.9); }
+}
+
+@keyframes auroraDrift2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-100px, -80px) scale(1.1); }
+  66% { transform: translate(60px, -40px) scale(0.95); }
+}
+
+@keyframes auroraDrift3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-120px, 80px) scale(1.2); }
+}
+
+@keyframes auroraDrift4 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(100px, -60px) scale(1.15); }
+}
+
+/* 极光细线条流光 */
+.bento-aurora-stream {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: 
+    linear-gradient(115deg, transparent 30%, rgba(13, 148, 136, 0.04) 50%, transparent 70%),
+    linear-gradient(245deg, transparent 40%, rgba(59, 130, 246, 0.035) 60%, transparent 80%);
+  background-size: 200% 200%, 200% 200%;
+  animation: streamFlow 18s ease-in-out infinite;
+  mix-blend-mode: multiply;
+}
+
+@keyframes streamFlow {
+  0%, 100% { background-position: 0% 0%, 100% 100%; }
+  50% { background-position: 100% 100%, 0% 0%; }
+}
+
+/* ===== 粒子星座网络（Canvas 容器） ===== */
+.bento-particle-network {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.7;
+}
+
+/* ===== 玻璃拟态卡片（升级版） ===== */
+.bento-card.bento-glass {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.78) 0%, 
+    rgba(248, 250, 252, 0.65) 100%);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 8px 24px rgba(15, 23, 42, 0.06),
+    0 16px 48px rgba(15, 23, 42, 0.04);
+}
+
+.bento-card.bento-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.5) 0%, 
+    transparent 50%);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+/* ===== 全息扫描线效果 ===== */
+.bento-holo-scan {
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-holo-scan::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, 
+    transparent 0%,
+    rgba(13, 148, 136, 0.08) 50%,
+    transparent 100%);
+  background-size: 100% 8px;
+  background-repeat: repeat-y;
+  animation: holoScanMove 8s linear infinite;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+@keyframes holoScanMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 100%; }
+}
+
+/* 全息扫描横线（移动的扫描光带） */
+.bento-holo-sweep::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(13, 148, 136, 0.6), 
+    rgba(59, 130, 246, 0.6), 
+    transparent);
+  box-shadow: 0 0 12px rgba(13, 148, 136, 0.6);
+  animation: holoSweep 4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes holoSweep {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* ===== 全息环形进度 ===== */
+.bento-holo-ring {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  transform-style: preserve-3d;
+  perspective: 600px;
+}
+
+.bento-holo-ring-svg {
+  transform: rotateX(60deg) rotateZ(0);
+  transform-style: preserve-3d;
+  animation: holoRingRotate 12s linear infinite;
+  filter: drop-shadow(0 8px 16px rgba(13, 148, 136, 0.3));
+}
+
+@keyframes holoRingRotate {
+  0% { transform: rotateX(60deg) rotateZ(0); }
+  100% { transform: rotateX(60deg) rotateZ(360deg); }
+}
+
+.bento-holo-ring-track {
+  fill: none;
+  stroke: rgba(13, 148, 136, 0.12);
+  stroke-width: 6;
+}
+
+.bento-holo-ring-progress {
+  fill: none;
+  stroke: url(#holoGrad);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 339.292;
+  stroke-dashoffset: 67.858;
+  filter: drop-shadow(0 0 8px rgba(13, 148, 136, 0.8));
+  animation: holoRingDash 3s ease-in-out infinite;
+}
+
+@keyframes holoRingDash {
+  0%, 100% { stroke-dashoffset: 67.858; }
+  50% { stroke-dashoffset: 33.929; }
+}
+
+.bento-holo-ring-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transform: translateZ(30px);
+  text-align: center;
+}
+
+.bento-holo-ring-value {
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--bento-primary), var(--bento-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 4px rgba(13, 148, 136, 0.3));
+}
+
+.bento-holo-ring-label {
+  font-size: 10px;
+  color: var(--bento-text-secondary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ===== 全息 3D 柱状图 ===== */
+.bento-holo-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 160px;
+  perspective: 800px;
+  transform-style: preserve-3d;
+  padding: 12px;
+}
+
+.bento-holo-bar {
+  flex: 1;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateX(-15deg) rotateY(15deg);
+  transition: all 0.4s var(--3d-transition);
+  cursor: pointer;
+}
+
+.bento-holo-bar-face {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, 
+    rgba(13, 148, 136, 0.85) 0%, 
+    rgba(13, 148, 136, 0.5) 100%);
+  border-radius: 4px 4px 0 0;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 4px 12px rgba(13, 148, 136, 0.3);
+}
+
+.bento-holo-bar-side {
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 8px;
+  height: 100%;
+  background: linear-gradient(180deg, 
+    rgba(13, 148, 136, 0.6) 0%, 
+    rgba(13, 148, 136, 0.3) 100%);
+  transform: skewY(-45deg);
+  transform-origin: left top;
+  border-radius: 0 4px 0 0;
+}
+
+.bento-holo-bar-top {
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: linear-gradient(135deg, 
+    rgba(45, 212, 191, 0.9) 0%, 
+    rgba(13, 148, 136, 0.7) 100%);
+  transform: skewX(-45deg);
+  transform-origin: left bottom;
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 0 12px rgba(13, 148, 136, 0.5);
+}
+
+.bento-holo-bar:hover {
+  transform: rotateX(-15deg) rotateY(15deg) translateZ(20px) scale(1.05);
+}
+
+.bento-holo-bar:hover .bento-holo-bar-face {
+  background: linear-gradient(180deg, 
+    rgba(45, 212, 191, 0.95) 0%, 
+    rgba(13, 148, 136, 0.7) 100%);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 8px 24px rgba(13, 148, 136, 0.5),
+    0 0 30px rgba(13, 148, 136, 0.4);
+}
+
+.bento-holo-bar-value {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(15px);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--bento-primary);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.bento-holo-bar:hover .bento-holo-bar-value {
+  opacity: 1;
+}
+
+/* ===== 神经网络 AI 可视化 ===== */
+.bento-neural-net {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  perspective: 800px;
+  transform-style: preserve-3d;
+}
+
+.bento-neural-layer {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transform: translateY(-50%) translateZ(var(--nz, 0));
+  transform-style: preserve-3d;
+}
+
+.bento-neural-layer:nth-child(1) { left: 8%; --nz: -40px; }
+.bento-neural-layer:nth-child(2) { left: 38%; --nz: 0px; }
+.bento-neural-layer:nth-child(3) { left: 68%; --nz: 40px; }
+.bento-neural-layer:nth-child(4) { left: 90%; --nz: 0px; }
+
+.bento-neural-node {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, 
+    rgba(45, 212, 191, 1), 
+    rgba(13, 148, 136, 0.8));
+  box-shadow: 
+    0 0 12px rgba(13, 148, 136, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  position: relative;
+  animation: neuralPulse 2s ease-in-out infinite;
+}
+
+.bento-neural-node:nth-child(1) { animation-delay: 0s; }
+.bento-neural-node:nth-child(2) { animation-delay: 0.3s; }
+.bento-neural-node:nth-child(3) { animation-delay: 0.6s; }
+.bento-neural-node:nth-child(4) { animation-delay: 0.9s; }
+
+@keyframes neuralPulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 0 12px rgba(13, 148, 136, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+  50% { 
+    transform: scale(1.3);
+    box-shadow: 0 0 20px rgba(13, 148, 136, 1), 0 0 30px rgba(13, 148, 136, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+}
+
+.bento-neural-link {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(90deg, 
+    rgba(13, 148, 136, 0.5), 
+    rgba(59, 130, 246, 0.5));
+  transform-origin: left center;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.bento-neural-pulse {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--bento-primary);
+  box-shadow: 0 0 8px rgba(13, 148, 136, 0.9);
+  animation: neuralFlow 2s linear infinite;
+}
+
+@keyframes neuralFlow {
+  0% { transform: translateX(0) scale(0); opacity: 0; }
+  20% { transform: translateX(20%) scale(1); opacity: 1; }
+  80% { transform: translateX(80%) scale(1); opacity: 1; }
+  100% { transform: translateX(100%) scale(0); opacity: 0; }
+}
+
+/* AI 核心呼吸球 */
+.bento-ai-core {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  position: relative;
+  transform-style: preserve-3d;
+  animation: aiCoreBreath 3s ease-in-out infinite;
+  background: radial-gradient(circle at 35% 35%, 
+    rgba(45, 212, 191, 0.9), 
+    rgba(13, 148, 136, 0.6) 50%, 
+    rgba(59, 130, 246, 0.3) 100%);
+  box-shadow: 
+    0 0 40px rgba(13, 148, 136, 0.5),
+    0 0 80px rgba(13, 148, 136, 0.3),
+    inset 0 4px 12px rgba(255, 255, 255, 0.3);
+}
+
+.bento-ai-core::before,
+.bento-ai-core::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px solid rgba(13, 148, 136, 0.4);
+  animation: aiCoreRing 3s ease-out infinite;
+}
+
+.bento-ai-core::after {
+  animation-delay: 1.5s;
+}
+
+@keyframes aiCoreBreath {
+  0%, 100% { 
+    transform: scale(1) rotateY(0);
+    box-shadow: 0 0 40px rgba(13, 148, 136, 0.5), 0 0 80px rgba(13, 148, 136, 0.3), inset 0 4px 12px rgba(255, 255, 255, 0.3);
+  }
+  50% { 
+    transform: scale(1.08) rotateY(180deg);
+    box-shadow: 0 0 60px rgba(13, 148, 136, 0.7), 0 0 120px rgba(13, 148, 136, 0.4), inset 0 4px 12px rgba(255, 255, 255, 0.4);
+  }
+}
+
+@keyframes aiCoreRing {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* ===== 磁吸按钮效果 ===== */
+.bento-magnetic-btn {
+  transform-style: preserve-3d;
+  transition: transform 0.2s var(--3d-transition);
+  will-change: transform;
+}
+
+.bento-magnetic-btn .bento-btn-content {
+  display: inline-block;
+  transition: transform 0.2s var(--3d-transition);
+}
+
+/* ===== 液态边框 ===== */
+.bento-liquid-border {
+  position: relative;
+  background: #fff;
+  border-radius: var(--bento-radius-md, 14px);
+}
+
+.bento-liquid-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--liquid-angle, 0deg),
+    var(--bento-primary, #0d9488),
+    var(--bento-blue, #3b82f6),
+    var(--bento-purple, #8b5cf6),
+    var(--bento-primary, #0d9488)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: liquidRotate 4s linear infinite;
+  pointer-events: none;
+}
+
+@property --liquid-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes liquidRotate {
+  0% { --liquid-angle: 0deg; }
+  100% { --liquid-angle: 360deg; }
+}
+
+/* ===== 渐变文字（极光文字） ===== */
+.bento-aurora-text {
+  background: linear-gradient(135deg, 
+    var(--bento-primary, #0d9488) 0%, 
+    var(--bento-blue, #3b82f6) 50%, 
+    var(--bento-purple, #8b5cf6) 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: auroraTextShift 6s ease-in-out infinite;
+}
+
+@keyframes auroraTextShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ===== 3D 立方体指标卡 ===== */
+.bento-3d-cube {
+  width: 100px;
+  height: 100px;
+  position: relative;
+  transform-style: preserve-3d;
+  animation: cubeFloat 6s ease-in-out infinite;
+}
+
+@keyframes cubeFloat {
+  0%, 100% { transform: rotateX(-20deg) rotateY(0deg) translateY(0); }
+  50% { transform: rotateX(-20deg) rotateY(180deg) translateY(-8px); }
+}
+
+.bento-3d-cube-face {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(13, 148, 136, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9), 
+    rgba(241, 245, 249, 0.8));
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.bento-3d-cube-face.front  { transform: translateZ(50px); }
+.bento-3d-cube-face.back   { transform: rotateY(180deg) translateZ(50px); }
+.bento-3d-cube-face.right  { transform: rotateY(90deg) translateZ(50px); }
+.bento-3d-cube-face.left   { transform: rotateY(-90deg) translateZ(50px); }
+.bento-3d-cube-face.top    { transform: rotateX(90deg) translateZ(50px); background: linear-gradient(135deg, rgba(13, 148, 136, 0.15), rgba(59, 130, 246, 0.15)); }
+.bento-3d-cube-face.bottom { transform: rotateX(-90deg) translateZ(50px); }
+
+/* ===== 升级版 3D 拓扑（多层深度 + 自动旋转 + 拖拽） ===== */
+.bento-topology-3d.bento-topology-pro {
+  perspective: 1400px;
+  perspective-origin: 50% 35%;
+  height: 540px;
+}
+
+.bento-topology-stage.bento-stage-rotatable {
+  transform: rotateX(55deg) rotateZ(var(--topo-rot, -45deg)) scale(var(--topo-scale, 0.85));
+  transform-style: preserve-3d;
+  transition: transform 0.1s linear;
+}
+
+.bento-topology-stage.bento-stage-rotatable.auto-rotate {
+  animation: topoAutoRotate 30s linear infinite;
+}
+
+@keyframes topoAutoRotate {
+  0% { transform: rotateX(55deg) rotateZ(-45deg) scale(0.85); }
+  100% { transform: rotateX(55deg) rotateZ(315deg) scale(0.85); }
+}
+
+/* 拓扑节点投影（地面阴影） */
+.bento-topology-node.bento-node-3d .bento-topology-node-shadow {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  width: 70px;
+  height: 16px;
+  transform: translateX(-50%) translateZ(-20px) rotateX(-90deg);
+  background: radial-gradient(ellipse, rgba(15, 23, 42, 0.25), transparent 70%);
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+/* 拓扑节点光柱（垂直光束） */
+.bento-topology-node.bento-node-3d .bento-topology-node-beam {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  width: 4px;
+  height: 80px;
+  transform: translateX(-50%) translateZ(0);
+  background: linear-gradient(180deg, 
+    transparent, 
+    rgba(13, 148, 136, 0.4), 
+    transparent);
+  filter: blur(2px);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.bento-topology-node.bento-node-3d:hover .bento-topology-node-beam,
+.bento-topology-node.bento-node-3d.alert .bento-topology-node-beam {
+  opacity: 1;
+  animation: beamPulse 1.5s ease-in-out infinite;
+}
+
+.bento-topology-node.bento-node-3d.alert .bento-topology-node-beam {
+  background: linear-gradient(180deg, 
+    transparent, 
+    rgba(239, 68, 68, 0.6), 
+    transparent);
+}
+
+@keyframes beamPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* 拓扑数据流粒子（沿连线流动） */
+.bento-topology-link.bento-link-flow::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bento-primary);
+  box-shadow: 0 0 12px rgba(13, 148, 136, 0.9);
+  transform: translateY(-50%);
+  animation: linkFlow 2.5s linear infinite;
+}
+
+.bento-topology-link.bento-link-flow.alert::after {
+  background: var(--bento-red);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.9);
+}
+
+@keyframes linkFlow {
+  0% { left: 0; opacity: 0; transform: translateY(-50%) scale(0); }
+  10% { opacity: 1; transform: translateY(-50%) scale(1); }
+  90% { opacity: 1; transform: translateY(-50%) scale(1); }
+  100% { left: 100%; opacity: 0; transform: translateY(-50%) scale(0); }
+}
+
+/* 拓扑多层深度（远中近三层） */
+.bento-topology-node.depth-far    { filter: brightness(0.85) saturate(0.8); opacity: 0.75; }
+.bento-topology-node.depth-mid    { opacity: 0.95; }
+.bento-topology-node.depth-near   { filter: brightness(1.05); }
+
+/* ===== 视差容器（鼠标驱动多层位移） ===== */
+.bento-parallax-scene {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+.bento-parallax-layer {
+  transform-style: preserve-3d;
+  transition: transform 0.2s ease-out;
+  will-change: transform;
+}
+
+.bento-parallax-layer[data-depth="1"] { transform: translateZ(0); }
+.bento-parallax-layer[data-depth="2"] { transform: translateZ(30px); }
+.bento-parallax-layer[data-depth="3"] { transform: translateZ(60px); }
+.bento-parallax-layer[data-depth="4"] { transform: translateZ(90px); }
+
+/* ===== 点击涟漪 3D ===== */
+.bento-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-ripple-wave {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0) translateZ(20px);
+  animation: rippleExpand 0.7s ease-out;
+  pointer-events: none;
+  background: radial-gradient(circle, 
+    rgba(13, 148, 136, 0.4), 
+    transparent 70%);
+  mix-blend-mode: screen;
+}
+
+@keyframes rippleExpand {
+  to {
+    transform: scale(4) translateZ(20px);
+    opacity: 0;
+  }
+}
+
+/* ===== 升级版指标卡（全息玻璃 + 翻转） ===== */
+.bento-metric-block.bento-metric-holo {
+  transform-style: preserve-3d;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.7), 
+    rgba(248, 250, 252, 0.5));
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-metric-block.bento-metric-holo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.6), 
+    transparent);
+  animation: metricHoloSweep 5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes metricHoloSweep {
+  0%, 100% { left: -100%; }
+  50% { left: 160%; }
+}
+
+.bento-metric-block.bento-metric-holo .bento-metric-value {
+  background: linear-gradient(135deg, 
+    var(--bento-primary), 
+    var(--bento-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 4px rgba(13, 148, 136, 0.25));
+}
+
+/* ===== 数字滚动动画 ===== */
+.bento-count-up {
+  display: inline-block;
+  animation: countUpIn 0.8s var(--3d-transition);
+}
+
+@keyframes countUpIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) translateZ(-30px) rotateX(30deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateZ(40px) rotateX(0);
+  }
+}
+
+/* ===== 升级版告警卡片（3D 倾斜 + 警报光波） ===== */
+.bento-incident-item.bento-incident-3d {
+  transform-style: preserve-3d;
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-incident-item.bento-incident-3d.critical {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.95), 
+    rgba(254, 242, 242, 0.9));
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  box-shadow: 
+    inset 4px 0 0 var(--bento-red),
+    0 8px 20px rgba(239, 68, 68, 0.12),
+    0 16px 40px rgba(239, 68, 68, 0.06);
+}
+
+.bento-incident-item.bento-incident-3d.critical::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 0% 50%, 
+    rgba(239, 68, 68, 0.12), 
+    transparent 40%);
+  pointer-events: none;
+  animation: criticalRipple 3s ease-in-out infinite;
+}
+
+@keyframes criticalRipple {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ===== 升级版工具卡片（3D 翻转 + 光晕） ===== */
+.bento-tool-item.bento-tool-3d {
+  transform-style: preserve-3d;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.85), 
+    rgba(248, 250, 252, 0.7));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.bento-tool-item.bento-tool-3d:hover {
+  transform: translateY(-6px) translateZ(30px) rotateX(8deg);
+  box-shadow: 
+    0 12px 24px rgba(13, 148, 136, 0.15),
+    0 24px 48px rgba(15, 23, 42, 0.1),
+    0 0 0 1px rgba(13, 148, 136, 0.2);
+}
+
+.bento-tool-item.bento-tool-3d::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at var(--3d-mx, 50%) var(--3d-my, 50%), 
+    rgba(13, 148, 136, 0.15), 
+    transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.bento-tool-item.bento-tool-3d:hover::after {
+  opacity: 1;
+}
+
+/* 工具卡片图标 3D 翻转 + 光环 */
+.bento-tool-item-icon-wrap {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.bento-tool-item.bento-tool-3d:hover .bento-tool-item-icon {
+  transform: translateZ(40px) scale(1.2) rotateY(360deg);
+}
+
+.bento-tool-item-icon-halo {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, 
+    rgba(13, 148, 136, 0.3), 
+    transparent 70%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  animation: haloRotate 4s linear infinite;
+}
+
+.bento-tool-item.bento-tool-3d:hover .bento-tool-item-icon-halo {
+  opacity: 1;
+}
+
+@keyframes haloRotate {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.2); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* ===== 升级版 AI 对话消息（3D 入场 + 全息边） ===== */
+.bento-chat-message.bento-chat-3d {
+  transform-style: preserve-3d;
+  animation: chatMessageIn3D 0.6s var(--3d-transition) backwards;
+}
+
+@keyframes chatMessageIn3D {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) translateZ(-80px) rotateY(-15deg) rotateX(10deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateZ(0) rotateY(0) rotateX(0);
+  }
+}
+
+.bento-chat-message.bento-chat-3d.bot .bento-chat-content {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9), 
+    rgba(241, 245, 249, 0.7));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(13, 148, 136, 0.15);
+  box-shadow: 
+    0 4px 12px rgba(13, 148, 136, 0.08),
+    0 8px 24px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.bento-chat-message.bento-chat-3d:hover .bento-chat-content {
+  transform: translateZ(15px);
+  box-shadow: 
+    0 6px 16px rgba(13, 148, 136, 0.15),
+    0 12px 32px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* AI 工具调用轨迹 - 全息卡片 */
+.bento-ai-tool-trace.bento-trace-3d {
+  background: linear-gradient(135deg, 
+    rgba(13, 148, 136, 0.06), 
+    rgba(59, 130, 246, 0.06));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(13, 148, 136, 0.2);
+  box-shadow: 
+    0 4px 12px rgba(13, 148, 136, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-ai-tool-trace.bento-trace-3d::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(13, 148, 136, 0.12), 
+    transparent);
+  animation: traceSweep 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes traceSweep {
+  0%, 100% { left: -100%; }
+  50% { left: 200%; }
+}
+
+/* ===== 升级版侧边栏（3D 浮起 + 玻璃） ===== */
+.bento-sidebar.bento-sidebar-3d {
+  background: linear-gradient(180deg, 
+    rgba(255, 255, 255, 0.85), 
+    rgba(248, 250, 252, 0.75));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 
+    4px 0 24px rgba(15, 23, 42, 0.04),
+    8px 0 48px rgba(15, 23, 42, 0.02);
+}
+
+.bento-sb-item.bento-sb-item-3d {
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-sb-item.bento-sb-item-3d.active {
+  background: linear-gradient(135deg, 
+    rgba(13, 148, 136, 0.12), 
+    rgba(59, 130, 246, 0.08));
+  border: 1px solid rgba(13, 148, 136, 0.2);
+  box-shadow: 
+    0 4px 12px rgba(13, 148, 136, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.bento-sb-item.bento-sb-item-3d.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) translateZ(10px);
+  width: 3px;
+  height: 60%;
+  background: linear-gradient(180deg, 
+    var(--bento-primary), 
+    var(--bento-blue));
+  border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 12px rgba(13, 148, 136, 0.6);
+}
+
+/* ===== 升级版登录页（极光 + 粒子 + 全息卡） ===== */
+.bento-auth-shell.bento-auth-pro {
+  background: 
+    radial-gradient(ellipse at 20% 30%, rgba(13, 148, 136, 0.15), transparent 50%),
+    radial-gradient(ellipse at 80% 70%, rgba(59, 130, 246, 0.12), transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(139, 92, 246, 0.08), transparent 60%),
+    linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-auth-shell.bento-auth-pro::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(13, 148, 136, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 148, 136, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: gridMove 20s linear infinite;
+  pointer-events: none;
+}
+
+.bento-auth-card.bento-auth-card-pro {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.85), 
+    rgba(248, 250, 252, 0.7));
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 20px 40px rgba(15, 23, 42, 0.12),
+    0 40px 80px rgba(15, 23, 42, 0.08),
+    0 80px 160px rgba(13, 148, 136, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-auth-card.bento-auth-card-pro::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    var(--bento-primary), 
+    var(--bento-blue), 
+    var(--bento-purple), 
+    transparent);
+  animation: authCardTopFlow 3s ease-in-out infinite;
+}
+
+@keyframes authCardTopFlow {
+  0%, 100% { opacity: 0.6; transform: scaleX(0.8); }
+  50% { opacity: 1; transform: scaleX(1); }
+}
+
+/* 登录页浮动装饰几何 */
+.bento-auth-geo {
+  position: absolute;
+  transform-style: preserve-3d;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.bento-auth-geo-1 {
+  top: 10%;
+  left: 8%;
+  width: 80px;
+  height: 80px;
+  border: 1px solid rgba(13, 148, 136, 0.4);
+  animation: geoFloat1 12s ease-in-out infinite;
+}
+
+.bento-auth-geo-2 {
+  top: 20%;
+  right: 12%;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  animation: geoFloat2 14s ease-in-out infinite;
+}
+
+.bento-auth-geo-3 {
+  bottom: 15%;
+  left: 15%;
+  width: 0;
+  height: 0;
+  border-left: 35px solid transparent;
+  border-right: 35px solid transparent;
+  border-bottom: 60px solid rgba(139, 92, 246, 0.2);
+  animation: geoFloat3 16s ease-in-out infinite;
+}
+
+@keyframes geoFloat1 {
+  0%, 100% { transform: rotate(0deg) translateZ(0); }
+  50% { transform: rotate(180deg) translateZ(40px); }
+}
+
+@keyframes geoFloat2 {
+  0%, 100% { transform: translateY(0) translateZ(0); }
+  50% { transform: translateY(-30px) translateZ(50px); }
+}
+
+@keyframes geoFloat3 {
+  0%, 100% { transform: rotate(0deg) translateZ(0); }
+  50% { transform: rotate(120deg) translateZ(30px); }
+}
+
+/* ===== 全息 SVG 渐变定义容器 ===== */
+.bento-holo-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ===== 升级版图表（3D 折线 + 阴影 + 渐变填充） ===== */
+.bento-chart-area.bento-chart-3d {
+  perspective: 800px;
+  transform-style: preserve-3d;
+}
+
+.bento-chart-svg.bento-chart-svg-3d {
+  transform: rotateX(20deg) translateZ(0);
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 16px 24px rgba(13, 148, 136, 0.2));
+  transition: transform 0.5s var(--3d-transition);
+}
+
+.bento-chart-svg.bento-chart-svg-3d:hover {
+  transform: rotateX(15deg) translateZ(20px) scale(1.02);
+}
+
+.bento-chart-svg .bento-chart-fill {
+  fill: url(#chartFill);
+  opacity: 0.3;
+}
+
+.bento-chart-svg .bento-chart-line {
+  stroke: url(#chartStroke);
+  stroke-width: 3;
+  fill: none;
+  filter: drop-shadow(0 4px 8px rgba(13, 148, 136, 0.4));
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: chartLineDraw 2s var(--3d-transition) forwards;
+}
+
+@keyframes chartLineDraw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ===== 升级版浮动 AI 通知（全息玻璃） ===== */
+.bento-ai-float.bento-ai-float-3d {
+  background: linear-gradient(135deg, 
+    rgba(13, 148, 136, 0.95), 
+    rgba(59, 130, 246, 0.95));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    0 8px 20px rgba(13, 148, 136, 0.3),
+    0 16px 40px rgba(13, 148, 136, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-ai-float.bento-ai-float-3d::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.4), 
+    transparent);
+  animation: aiFloatSweep 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes aiFloatSweep {
+  0%, 100% { left: -100%; }
+  50% { left: 200%; }
+}
+
+/* ===== 性能优化：低性能设备降级 ===== */
+@media (max-width: 768px) {
+  .bento-aurora-blob {
+    filter: blur(60px);
+    opacity: 0.4;
+  }
+  
+  .bento-aurora-blob.blob-violet,
+  .bento-aurora-blob.blob-amber {
+    display: none;
+  }
+  
+  .bento-holo-bars {
+    height: 120px;
+  }
+  
+  .bento-3d-cube {
+    width: 70px;
+    height: 70px;
+  }
+  
+  .bento-3d-cube-face {
+    width: 70px;
+    height: 70px;
+  }
+  
+  .bento-3d-cube-face.front  { transform: translateZ(35px); }
+  .bento-3d-cube-face.back   { transform: rotateY(180deg) translateZ(35px); }
+  .bento-3d-cube-face.right  { transform: rotateY(90deg) translateZ(35px); }
+  .bento-3d-cube-face.left   { transform: rotateY(-90deg) translateZ(35px); }
+  .bento-3d-cube-face.top    { transform: rotateX(90deg) translateZ(35px); }
+  .bento-3d-cube-face.bottom { transform: rotateX(-90deg) translateZ(35px); }
+  
+  .bento-neural-net {
+    height: 90px;
+  }
+  
+  .bento-topology-3d.bento-topology-pro {
+    height: 420px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento-aurora-blob,
+  .bento-aurora-stream,
+  .bento-particle-network,
+  .bento-holo-scan,
+  .bento-holo-sweep,
+  .bento-ai-core,
+  .bento-3d-cube,
+  .bento-topology-stage.auto-rotate {
+    animation: none !important;
+  }
+  
+  .bento-metric-block.bento-metric-holo::before,
+  .bento-ai-tool-trace.bento-trace-3d::after,
+  .bento-ai-float.bento-ai-float-3d::before {
+    display: none;
+  }
+}

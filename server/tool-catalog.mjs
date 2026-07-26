@@ -61,6 +61,29 @@ const newTools = [
   { id: 'batch-check', group: 'infrastructure', risk: 'read', keywords: ['批量Ping', 'CSV', '端口'] },
   { id: 'desktop-diagnosis', group: 'desktop', risk: 'read', keywords: ['智能诊断', '无法上网', '电脑卡顿'] },
   { id: 'delivery-acceptance', group: 'desktop', risk: 'read', keywords: ['验收', '交付', '报告'] },
+  { id: 'bandwidth-time', group: 'utility', risk: 'read', keywords: ['带宽', '传输时间', '下载时间'] },
+  { id: 'cctv-storage', group: 'utility', risk: 'read', keywords: ['监控存储', '录像容量', '保留天数'] },
+  { id: 'poe-budget', group: 'utility', risk: 'read', keywords: ['PoE', '功率预算', '交换机'] },
+  { id: 'ups-runtime', group: 'utility', risk: 'read', keywords: ['UPS', '续航', '电池容量'] },
+  { id: 'optical-power', group: 'utility', risk: 'read', keywords: ['光功率', '链路损耗', '光纤'] },
+  { id: 'raid-capacity', group: 'utility', risk: 'read', keywords: ['RAID', '磁盘阵列', '容量'] },
+  { id: 'vlsm-calc', group: 'network', risk: 'read', keywords: ['VLSM', 'IPv4', '子网规划'] },
+  { id: 'dns-benchmark', group: 'network', risk: 'read', keywords: ['DNS测速', 'DNS对比', '劫持检查'] },
+  { id: 'ip-conflict-check', group: 'network', risk: 'read', keywords: ['IP冲突', '地址冲突', 'ARP证据'] },
+  { id: 'continuous-ping', group: 'network', risk: 'read', keywords: ['持续Ping', '丢包', '延迟', '抖动'] },
+  { id: 'batch-ping', group: 'network', risk: 'read', keywords: ['批量Ping', '多目标', 'CSV'] },
+  { id: 'subnet-ping', group: 'network', risk: 'read', keywords: ['网段Ping', '在线主机', '扫描'] },
+  { id: 'flow-monitor', group: 'network', risk: 'read', keywords: ['实时流量', '网卡速率', 'RX', 'TX'] },
+  { id: 'link-monitor', group: 'network', risk: 'read', keywords: ['链路监控', '掉线告警', '恢复告警', 'Webhook'] },
+  { id: 'wifi-channel-analysis', group: 'network', risk: 'read', keywords: ['WiFi信道', 'BSSID', '无线干扰'] },
+  { id: 'wifi-profile-export', group: 'network', risk: 'repair', keywords: ['WiFi配置', '无线密码', '脱敏导出', '迁移'] },
+  { id: 'packet-capture', group: 'network', risk: 'repair', keywords: ['pktmon', '抓包', 'PCAPNG', '流量采集'] },
+  { id: 'pcap-analyzer', group: 'network', risk: 'read', keywords: ['PCAP', '协议分析', 'DNS', 'HTTP', 'LLDP'] },
+  { id: 'route-manager', group: 'network', risk: 'repair', keywords: ['静态路由', '网关', 'InterfaceIndex', '回滚'] },
+  { id: 'firewall-manager', group: 'network', risk: 'repair', keywords: ['防火墙规则', '端口放行', '入站', '出站', '回滚'] },
+  { id: 'system-launcher', group: 'utility', risk: 'read', keywords: ['系统工具', '控制面板', '设备管理器'] },
+  { id: 'remote-terminal', group: 'utility', risk: 'repair', keywords: ['SSH', 'Telnet', '远程终端', '多会话'] },
+  { id: 'rdp-history', group: 'utility', risk: 'repair', keywords: ['RDP', '远程桌面', '连接历史'] },
 ];
 
 export const TOOL_CATALOG = [...legacyTools, ...newTools];
@@ -75,4 +98,3 @@ export function getToolGroups() {
     return groups;
   }, {});
 }
-

@@ -1,9 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$port = 8787
+$port = 3000
 
 if (-not (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)) {
-    Start-Process -FilePath 'node.exe' -ArgumentList 'server.mjs' -WorkingDirectory $root -WindowStyle Hidden
+    Start-Process -FilePath 'node.exe' -ArgumentList 'server.js' -WorkingDirectory $root -WindowStyle Hidden
     Start-Sleep -Seconds 2
 }
 

@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>运维百宝箱 · Bento Grid</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/bento.css" />
+  </head>
+  <body>
+    <div id="bento-app" class="bento-app"></div>
+    <script>
+      const bentoState = {
+        activeTab: 'network',
+        toolStates: {
+          'ping-test': 'success',
+          'network-quality': 'running',
+          'port-scan': 'default',
+          'traceroute': 'default',
+          'dns-diagnosis': 'error',
+          'process-list': 'default',
+        },
+        showAIFloat: true,
+      };
+
+      const navItems = [
+        { id: 'dashboard', icon: 'layout-dashboard', label: '工作台', active: true },
+        { id: 'network', icon: 'wifi', label: '网络诊断' },
+        { id: 'system', icon: 'monitor', label: '系统检测' },
+        { id: 'topology', icon: 'network', label: '网络拓扑' },
+        { id: 'assets', icon: 'server', label: '资产管理' },
+      ];
+      const navItems2 = [
+        { id: 'tickets', icon: 'ticket', label: '工单系统' },
+        { id: 'knowledge', icon: 'book-open', label: '知识库' },
+        { id: 'ai', icon: 'sparkles', label: 'AI 排障' },
+        { id: 'audit', icon: 'history', label: '审计日志' },
+      ];
+
+      const tabs = [
+        { id: 'network', icon: 'activity', label: '网络诊断' },
+        { id: 'system', icon: 'monitor', label: '系统检测' },
+        { id: 'topology', icon: 'network', label: '网络拓扑' },
+        { id: 'performance', icon: 'bar-chart-2', label: '性能分析' },
+        { id: 'security', icon: 'shield', label: '安全审计' },
+      ];
+
+      const tools = [
+        { id: 'ping-test', icon: 'radar', name: 'Ping 测试', desc: '延迟 12ms · 0% 丢包' },
+        { id: 'network-quality', icon: 'loader', name: '网络质量检测', desc: '正在执行... 65%' },
+        { id: 'port-scan', icon: 'layout-grid', name: '端口扫描', desc: 'TCP 端口探测' },
+        { id: 'traceroute', icon: 'git-commit', name: '路由追踪', desc: 'Tracert 路径分析' },
+        { id: 'dns-diagnosis', icon: 'x-circle', name: 'DNS 诊断', desc: '解析失败 · 超时' },
+        { id: 'process-list', icon: 'cpu', name: '进程列表', desc: 'CPU/内存排行' },
+      ];
+
+      const incidents = [
+        { sev: 'p1', critical: true, name: '核心交换机 CPU 过载', meta: ['核心防火墙', '192.168.1.1'], time: '2 分钟' },
+        { sev: 'p2', critical: false, name: '收银区网络抖动', meta: ['接入交换机-03', '一楼'], time: '15 分钟' },
+        { sev: 'p2', critical: false, name: '打印机离线', meta: ['HP-LaserJet-01', '办公区'], time: '1 小时' },
+        { sev: 'p3', critical: false, name: '磁盘使用率超阈值', meta: ['服务器-02', 'D: 85%'], time: '3 小时' },
+      ];
+
+      const activities = [
+        { type: 'error', text: '<strong>核心交换机</strong> 触发 <strong>CPU 过载告警</strong>', time: '2 分钟前' },
+        { type: 'success', text: '<strong>管理员</strong> 执行了 <strong>Ping 测试</strong>', time: '5 分钟前' },
+        { type: 'tool', text: '<strong>AI 助手</strong> 启动 <strong>网络质量检测</strong>', time: '8 分钟前' },
+        { type: 'success', text: '工单 <strong>#1204</strong> 已解决并关闭', time: '23 分钟前' },
+        { type: 'alert', text: '<strong>工程师</strong> 响应了打印机故障', time: '1 小时前' },
+      ];
+
+      function icon(name, size = 16) {
+        return `<i data-lucide="${name}" style="width:${size}px;height:${size}px;display:grid;place-items:center;"></i>`;
+      }
+
+      function renderSidebar() {
+        const renderItem = (item) => `
+          <div class="bento-sb-item ${item.active ? 'active' : ''}" data-nav="${item.id}" title="${item.label}">
+            ${icon(item.icon, 17)}
+          </div>`;
+        return `
+          <aside class="bento-sidebar">
+            <div class="bento-sb-logo">
+              <div class="bento-sb-logo-mark">运</div>
+              <div class="bento-sb-logo-text">OPS BOX</div>
+            </div>
+            ${navItems.map(renderItem).join('')}
+            <div class="bento-sb-divider"></div>
+            ${navItems2.map(renderItem).join('')}
+            <div class="bento-sb-spacer"></div>
+            <div class="bento-sb-item" title="设置">${icon('settings', 17)}</div>
+            <div class="bento-sb-avatar">A</div>
+          </aside>`;
+      }
+
+      function renderTopbar() {
+        return `
+          <div class="bento-topbar">
+            <div class="bento-topbar-row">
+              <div class="bento-topbar-title">
+                <h1>运维百宝箱</h1>
+                <span class="bento-env-badge">● 生产环境</span>
+              </div>
+              <div class="bento-topbar-actions">
+                <div class="bento-search">
+                  ${icon('search', 14)}
+                  搜索工具、设备、故障...
+                  <kbd>⌘K</kbd>
+                </div>
+                <div class="bento-icon-btn" title="通知">
+                  ${icon('bell', 15)}
+                  <span class="dot-notif"></span>
+                </div>
+              </div>
+            </div>
+            <div class="bento-tabs">
+              ${tabs.map(t => `
+                <div class="bento-tab ${bentoState.activeTab === t.id ? 'active' : ''}" data-tab="${t.id}">
+                  ${icon(t.icon, 12)}
+                  ${t.label}
+                </div>`).join('')}
+            </div>
+          </div>`;
+      }
+
+      function renderMetricsCard() {
+        return `
+          <div class="bento-card bento-card-wide">
+            <div class="bento-card-head">
+              <div class="bento-card-title-group">
+                <div class="bento-card-title">
+                  <span class="bento-card-icon">${icon('activity', 16)}</span>
+                  网络健康概览
+                </div>
+                <div class="bento-card-subtitle">实时监控网络延迟、丢包与可用性</div>
+              </div>
+              <div class="bento-card-action">查看详情 →</div>
+            </div>
+            <div class="bento-metric-row">
+              <div class="bento-metric-block">
+                <span class="bento-metric-label">平均延迟</span>
+                <div class="bento-metric-value">12<span class="bento-metric-unit">ms</span></div>
+                <div class="bento-metric-trend down">
+                  ${icon('trending-down', 11)}
+                  -2.3ms
+                </div>
+              </div>
+              <div class="bento-metric-block">
+                <span class="bento-metric-label">丢包率</span>
+                <div class="bento-metric-value">0.2<span class="bento-metric-unit">%</span></div>
+                <div class="bento-metric-trend down">
+                  ${icon('trending-down', 11)}
+                  -0.1%
+                </div>
+              </div>
+              <div class="bento-metric-block">
+                <span class="bento-metric-label">在线设备</span>
+                <div class="bento-metric-value">128</div>
+                <div class="bento-metric-trend up">
+                  ${icon('trending-up', 11)}
+                  +5 台
+                </div>
+              </div>
+            </div>
+            <div class="bento-chart-area">
+              <svg class="bento-chart-svg" viewBox="0 0 400 110" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="bentoChartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color: #0d9488; stop-opacity: 0.3"/>
+                    <stop offset="100%" style="stop-color: #0d9488; stop-opacity: 0"/>
+                  </linearGradient>
+                </defs>
+                <path class="bento-chart-area-fill" d="M0 75 Q30 66 60 58 T120 50 T180 42 T240 46 T300 32 T360 38 L400 31 L400 110 L0 110 Z"/>
+                <path class="bento-chart-line" d="M0 75 Q30 66 60 58 T120 50 T180 42 T240 46 T300 32 T360 38 L400 31"/>
+                <circle class="bento-chart-dot" cx="300" cy="32" r="3.5"/>
+              </svg>
+              <div class="bento-chart-x-labels">
+                <span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>现在</span>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      function renderToolsCard() {
+        const iconMap = {
+          'ping-test': 'check-circle-2',
+          'network-quality': 'loader',
+          'port-scan': 'layout-grid',
+          'traceroute': 'git-commit-horizontal',
+          'dns-diagnosis': 'x-circle',
+          'process-list': 'cpu',
+        };
+        return `
+          <div class="bento-card bento-card-tall">
+            <div class="bento-card-head">
+              <div class="bento-card-title-group">
+                <div class="bento-card-title">
+                  <span class="bento-card-icon">${icon('wrench', 16)}</span>
+                  快捷工具
+                </div>
+              </div>
+            </div>
+            <div class="bento-tool-grid">
+              ${tools.map(tool => {
+                const state = bentoState.toolStates[tool.id] || 'default';
+                const stateClass = state !== 'default' ? `state-${state}` : '';
+                const dotHtml = state !== 'default' ? '<span class="bento-tool-state-dot"></span>' : '';
+                return `
+                <div class="bento-tool-item ${stateClass}" data-tool="${tool.id}">
+                  ${dotHtml}
+                  <div class="bento-tool-item-icon">${icon(iconMap[tool.id] || tool.icon, 16)}</div>
+                  <div class="bento-tool-item-info">
+                    <div class="bento-tool-item-name">${tool.name}</div>
+                    <div class="bento-tool-item-desc">${tool.desc}</div>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`;
+      }
+
+      function renderIncidentsCard() {
+        return `
+          <div class="bento-card">
+            <div class="bento-card-head">
+              <div class="bento-card-title-group">
+                <div class="bento-card-title">
+                  <span class="bento-card-icon" style="color: var(--bento-red)">${icon('alert-triangle', 16)}</span>
+                  活动告警
+                </div>
+                <div class="bento-card-subtitle">7 个待处理</div>
+              </div>
+              <div class="bento-card-action">全部 →</div>
+            </div>
+            <div class="bento-incident-list">
+              ${incidents.map(inc => `
+                <div class="bento-incident-item ${inc.critical ? 'critical' : ''}">
+                  <div class="bento-sev-tag ${inc.sev}"></div>
+                  <div class="bento-incident-content">
+                    <div class="bento-incident-name">${inc.name}</div>
+                    <div class="bento-incident-meta">${inc.meta.map(m => `<span>${m}</span>`).join('')}</div>
+                  </div>
+                  ${inc.critical ? '<span class="bento-p1-badge">P1</span>' : ''}
+                  <div class="bento-incident-time">${inc.time}</div>
+                </div>`).join('')}
+            </div>
+          </div>`;
+      }
+
+      function renderActivityCard() {
+        return `
+          <div class="bento-card">
+            <div class="bento-card-head">
+              <div class="bento-card-title-group">
+                <div class="bento-card-title">
+                  <span class="bento-card-icon" style="color: var(--bento-blue)">${icon('clock', 16)}</span>
+                  最近活动
+                </div>
+              </div>
+            </div>
+            <div class="bento-activity-timeline">
+              ${activities.map(act => `
+                <div class="bento-act-item act-${act.type}">
+                  <div class="bento-act-text">${act.text}</div>
+                  <div class="bento-act-time">${act.time}</div>
+                </div>`).join('')}
+            </div>
+          </div>`;
+      }
+
+      function renderAIFloat() {
+        if (!bentoState.showAIFloat) return '';
+        return `
+          <div class="bento-ai-float" id="bento-ai-float">
+            <div class="bento-ai-avatar">✦</div>
+            <div class="bento-ai-content">
+              <div class="bento-ai-title">
+                <span class="bento-ai-dot"></span>
+                AI 正在诊断网络问题
+              </div>
+              <div class="bento-ai-desc">并行执行 4 项检测 · 已完成 3 / 4</div>
+              <div class="bento-ai-progress">
+                <div class="bento-ai-progress-bar"></div>
+              </div>
+              <div class="bento-ai-tool-tags">
+                <span class="bento-ai-tool-tag done">✓ Ping</span>
+                <span class="bento-ai-tool-tag done">✓ 端口扫描</span>
+                <span class="bento-ai-tool-tag running">⏳ 网络质量</span>
+                <span class="bento-ai-tool-tag">DNS</span>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      function renderMain() {
+        return `
+          <div class="bento-main">
+            <div class="bento-grid">
+              ${renderMetricsCard()}
+              ${renderToolsCard()}
+              ${renderIncidentsCard()}
+              ${renderActivityCard()}
+            </div>
+            ${renderAIFloat()}
+          </div>`;
+      }
+
+      function renderApp() {
+        const app = document.getElementById('bento-app');
+        app.innerHTML = renderSidebar() + renderTopbar() + renderMain();
+        if (window.lucide) {
+          lucide.createIcons({ root: app });
+        }
+        bindEvents();
+      }
+
+      function bindEvents() {
+        document.querySelectorAll('.bento-tab').forEach(tab => {
+          tab.addEventListener('click', () => {
+            bentoState.activeTab = tab.dataset.tab;
+            document.querySelectorAll('.bento-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+          });
+        });
+
+        document.querySelectorAll('.bento-tool-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const toolId = item.dataset.tool;
+            if (bentoState.toolStates[toolId] === 'running') return;
+            bentoState.toolStates[toolId] = 'running';
+            renderApp();
+            setTimeout(() => {
+              bentoState.toolStates[toolId] = 'success';
+              renderApp();
+            }, 2000);
+          });
+        });
+
+        const aiFloat = document.getElementById('bento-ai-float');
+        if (aiFloat) {
+          aiFloat.addEventListener('click', () => {
+            alert('打开 AI 排障助手');
+          });
+        }
+
+        document.querySelectorAll('.bento-sb-item[data-nav]').forEach(item => {
+          item.addEventListener('click', () => {
+            document.querySelectorAll('.bento-sb-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+          });
+        });
+      }
+
+      document.addEventListener('DOMContentLoaded', renderApp);
+    </script>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-# IT 运维百宝箱（OpsHub）
+# IT 运维百宝箱
 
 面向门店、办公室、机房和桌面支持的本地运维指挥台。默认只监听 `127.0.0.1`，资产、工单、知识、附件和 AI 配置均保存在本机。
 
@@ -27,11 +27,11 @@ npm.cmd run package:portable
 4. 在“AI 排障助手”描述现象，可导入日志或门店 Agent 的 JSON 采集包。
 5. 受控修复必须由现场人员确认；修复后完成验证和回滚检查。
 6. 创建工单和现场处置单，关联资产、事件、证据附件并导出报告。
-7. 在“审计日志”导出 `OpsHubBackup/2` 便携备份，证据文件会一并打包。
+7. 在“审计日志”导出 `ITOpsToolboxBackup/2` 便携备份，证据文件会一并打包。
 
 ## 门店现场采集 Agent
 
-在“资产管理”点击“下载门店采集代理”。它是一次性只读 PowerShell 脚本：不常驻、不远控、不修改系统或网络配置。运行后会在桌面生成 `OpsHub-FieldCollect-*.json`，可用于：
+在“资产管理”点击“下载门店采集代理”。它是一次性只读 PowerShell 脚本：不常驻、不远控、不修改系统或网络配置。运行后会在桌面生成 `IT-Ops-Toolbox-FieldCollect-*.json`，可用于：
 
 - “导入门店采集包”，登记或补全资产；
 - AI 排障助手的“导入日志”；
@@ -46,7 +46,7 @@ npm.cmd run package:portable
 
 ## 数据与安全
 
-- 数据：`data/opshub.json`
+- 数据：`data/it-ops-toolbox.json`。旧版 `data/opshub.json` 会在首次写入时自动迁移，不会丢失。
 - 证据附件：`data/evidence/`
 - OCR 缓存：`data/ocr-cache/`
 - 受控修复、AI 只读诊断、Agent 导入、OCR 和附件上传均写入审计。
@@ -74,4 +74,5 @@ npm.cmd run package:portable
 - 无权限访问会返回 403。
 - 受控修复包括刷新 DNS、DHCP 续租、打印服务启动/重启、清理打印队列、打印测试页。
 - 启动外部程序包括 RDP、打开设备网页、Wireshark/Nmap/RustDesk/AnyDesk 等本机工具桥。
+- 远程管理工作台提供真实 SSH/Telnet 多会话终端、命令输入输出、会话断开、输出导出和脱敏连接历史；RDP 通过 Windows `mstsc.exe` 启动，密码不写入历史或审计。
 - 会话保存在服务端内存中，重启运维百宝箱后需要重新登录。

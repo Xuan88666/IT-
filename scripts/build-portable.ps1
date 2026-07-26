@@ -10,7 +10,7 @@ if (-not $outputRootPath.StartsWith($projectRoot, [System.StringComparison]::Ord
 }
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$packageRoot = Join-Path $outputRootPath "OpsHub-Portable-$stamp"
+$packageRoot = Join-Path $outputRootPath "IT-Ops-Toolbox-Portable-$stamp"
 $appRoot = Join-Path $packageRoot 'app'
 $runtimeRoot = Join-Path $packageRoot 'runtime'
 New-Item -ItemType Directory -Force -Path $appRoot, $runtimeRoot, (Join-Path $appRoot 'data') | Out-Null
@@ -37,27 +37,27 @@ $launcher = @'
 @echo off
 setlocal
 cd /d "%~dp0app"
-start "OpsHub Server" /min "%~dp0runtime\node.exe" server.mjs
+start "IT Ops Toolbox" /min "%~dp0runtime\node.exe" server.mjs
 timeout /t 3 /nobreak >nul
 start "" http://127.0.0.1:8787/
 '@
-[System.IO.File]::WriteAllText((Join-Path $packageRoot 'Start-OpsHub.cmd'), $launcher, [System.Text.Encoding]::ASCII)
+[System.IO.File]::WriteAllText((Join-Path $packageRoot 'Start-IT-Ops-Toolbox.cmd'), $launcher, [System.Text.Encoding]::ASCII)
 
 $stopper = @'
 @echo off
 setlocal
 powershell.exe -NoProfile -Command "$root=[IO.Path]::GetFullPath('%~dp0app\server.mjs'); Get-CimInstance Win32_Process -Filter 'Name = ''node.exe''' | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($root) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
 '@
-[System.IO.File]::WriteAllText((Join-Path $packageRoot 'Stop-OpsHub.cmd'), $stopper, [System.Text.Encoding]::ASCII)
+[System.IO.File]::WriteAllText((Join-Path $packageRoot 'Stop-IT-Ops-Toolbox.cmd'), $stopper, [System.Text.Encoding]::ASCII)
 
 $notice = @"
-OpsHub Portable Edition
+IT Ops Toolbox Portable Edition
 
-1. Double click Start-OpsHub.cmd.
+1. Double click Start-IT-Ops-Toolbox.cmd.
 2. Open http://127.0.0.1:8787/ in a browser.
-3. Data is stored in app\data. Export OpsHubBackup/2 regularly.
+3. Data is stored in app\data. Export ITOpsToolboxBackup/2 regularly.
 4. Create app\.env from app\.env.example for AI settings. No development secret is included.
-5. Double click Stop-OpsHub.cmd to stop only this portable package Node process.
+5. Double click Stop-IT-Ops-Toolbox.cmd to stop only this portable package Node process.
 "@
 [System.IO.File]::WriteAllText((Join-Path $packageRoot 'README.txt'), $notice, [System.Text.Encoding]::ASCII)
 

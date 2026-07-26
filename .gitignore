@@ -6,3 +6,13 @@ dist/
 data/*
 !data/.gitkeep
 release/
+
+# 本地临时产物与调试文件
+work/
+screenshots/
+NetworkTestingToolkitV87.exe_extracted/
+ref_screenshot.png
+server-console.log
+*.log
+cookies.txt
+chi_sim.traineddata

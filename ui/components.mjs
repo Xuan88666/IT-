@@ -1,3 +1,8 @@
+import '/node_modules/@shoelace-style/shoelace/dist/components/alert/alert.js';
+import '/node_modules/@shoelace-style/shoelace/dist/components/button/button.js';
+import '/node_modules/@shoelace-style/shoelace/dist/components/dialog/dialog.js';
+import '/node_modules/@shoelace-style/shoelace/dist/components/drawer/drawer.js';
+
 function toastStack() {
   let stack = document.querySelector('#opshub-toast-stack');
   if (!stack) {
