@@ -6,7 +6,7 @@ import { hostname, networkInterfaces } from 'node:os';
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { basename, extname, join, normalize } from 'node:path';
+import { basename, extname, join, normalize, sep } from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import net from 'node:net';
 import dgram from 'node:dgram';
@@ -60,6 +60,12 @@ const mysqlPool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   charset: 'utf8mb4',
+  // 远程 MySQL / NAT 会掐断空闲 TCP：保活探测 + 主动回收空闲连接，避免拿到已死连接报 PROTOCOL_CONNECTION_LOST
+  connectTimeout: 10000,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  maxIdle: 5,
+  idleTimeout: 60000,
 });
 
 const mailTransporter = nodemailer.createTransport({
@@ -256,6 +262,21 @@ const send = (res, status, body, type = 'application/json; charset=utf-8') => {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
   res.end(Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body));
 };
+
+// 静态资源访问控制：默认拒绝敏感目录/后端源码/隐藏文件，只放行前端真正需要的资源类型
+const staticExtraAllow = new Set(['/data/oui-compact.json', '/agent/门店现场采集代理.ps1', '/agent/运行门店现场采集.cmd']);
+const staticDeniedRoots = new Set(['data', 'server', 'scripts', 'node_modules', 'work', 'release', 'deploy', 'docs', 'external-tools', 'dist', 'screenshots', 'agent', 'ui']);
+const staticAllowedExt = new Set(['.html', '.js', '.css', '.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.map']);
+function isStaticPathAllowed(requestPath) {
+  const clean = String(requestPath).replace(/\\/g, '/').toLowerCase();
+  if (staticExtraAllow.has(clean)) return true;
+  const segments = clean.split('/').filter(Boolean);
+  if (segments.some((part) => part.startsWith('.'))) return false;
+  if (segments.length && staticDeniedRoots.has(segments[0])) return false;
+  const ext = extname(clean);
+  if (!ext) return true; // 无扩展名路径回退到 index.html（前端路由）
+  return staticAllowedExt.has(ext);
+}
 
 // 静态资源缓存：内存缓存 + gzip 预压缩 + ETag 协商缓存（304），避免每次请求都读盘并全量传输
 const staticCache = new Map();
@@ -1589,6 +1610,7 @@ async function handleApi(req, res, pathname) {
     const target = String(body.target || body.email || '').trim().toLowerCase();
     const purpose = String(body.purpose || 'register').trim();
     if (!isQqEmail(target)) return send(res, 400, { ok: false, output: '验证码仅支持 QQ 邮箱，例如 123456@qq.com。' });
+    if (!rateLimitStore.allowCode(`${purpose}:${target}`, clientIp(req))) return send(res, 429, { ok: false, output: '验证码请求过于频繁，请稍后再试。' });
     const code = storeVerificationCode(target, purpose);
     const mailConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
     if (mailConfigured) {
@@ -2893,7 +2915,8 @@ app.use(async (req, res) => {
     let requestPath;
     try { requestPath = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname); } catch { return send(res, 400, 'Invalid path', 'text/plain'); }
     const file = normalize(join(root, requestPath));
-    if (!file.startsWith(root)) return send(res, 403, 'Forbidden', 'text/plain');
+    if (file !== root && !file.startsWith(root + sep)) return send(res, 403, 'Forbidden', 'text/plain');
+    if (!isStaticPathAllowed(requestPath)) return send(res, 404, 'Not found', 'text/plain');
     try { return await serveStaticFile(req, res, file); }
     catch {
       if (!extname(requestPath)) {

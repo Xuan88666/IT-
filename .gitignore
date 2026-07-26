@@ -8,6 +8,9 @@ data/*
 !data/knowledge-seed.json
 release/
 
+# 测试运行残留
+data-contract-*/
+
 # 本地临时产物与调试文件
 work/
 screenshots/

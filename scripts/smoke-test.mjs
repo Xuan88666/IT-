@@ -169,13 +169,20 @@ try {
     await request('/bento.css');
     await request('/app.js');
   });
+  await check('敏感文件不可通过静态路径下载', async () => {
+    for (const path of ['/.env', '/data/it-ops-toolbox.json', '/server.mjs', '/server/rate-limit.mjs', '/init.sql', '/scripts/smoke-test.mjs', '/.git/config', '/package.json']) {
+      await request(path, {}, 404);
+    }
+    await request('/data/oui-compact.json');
+    await request('/vendor/lucide.min.js');
+  });
   await check('注册页邮箱验证码入口完整且无滑动验证', async () => {
     const script = await (await request('/app.js')).text();
     for (const marker of ['data-action="send-code"', 'sendVerificationCode', '账号或邮箱']) {
       if (!script.includes(marker)) throw new Error(`注册验证码缺少入口：${marker}`);
     }
     if (script.includes('data-captcha-slider') || script.includes('refresh-slider-captcha')) throw new Error('前端仍保留滑动验证入口');
-    const code = await json('/api/auth/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: '123456@qq.com', purpose: 'register' }) });
+    const code = await json('/api/auth/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: '654321@qq.com', purpose: 'register' }) });
     if (!code.ok || !/^\d{6}$/.test(String(code.code || ''))) throw new Error('本地验证码接口未返回 6 位验证码');
   });
   await check('首页工作台和输出历史入口完整', async () => {
