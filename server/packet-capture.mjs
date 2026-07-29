@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -386,7 +386,7 @@ export class PacketCaptureManager {
     const size = clampInteger(packetSize, 0, 0, 65535);
     const maxFile = clampInteger(fileSizeMB, 32, 4, 64);
     const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
-    const id = `CAP-${stamp}-${randomBytes(3).toString('hex')}`;
+    const id = `CAP-${stamp}-${randomBytes(8).toString('hex')}`;
     await mkdir(this.captureDir, { recursive: true });
     const etlPath = join(this.captureDir, `${id}.etl`);
     const pcapPath = join(this.captureDir, `${id}.pcapng`);
@@ -420,15 +420,18 @@ export class PacketCaptureManager {
       throw error;
     } finally {
       this.active = null;
+      // 清理 .etl 临时文件
+      try { if (record.etlPath) await unlink(record.etlPath); } catch { /* .etl 可能已被 pktmon 删掉 */ }
       await this.saveRecords();
     }
     return this.publicRecord(record);
   }
 
-  async file(id) {
+  async file(id, userId = null) {
     const records = await this.loadRecords();
     const record = records.find((item) => item.id === id && item.status === 'completed');
     if (!record || !existsSync(record.pcapPath)) throw new Error('抓包文件不存在或尚未完成转换。');
+    if (userId && record.userId && record.userId !== userId) throw new Error('无权访问此抓包文件。');
     return { record: this.publicRecord(record), data: await readFile(record.pcapPath) };
   }
 

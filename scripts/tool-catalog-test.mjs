@@ -26,5 +26,6 @@ assert.equal(getToolById('firewall-manager').risk, 'repair');
 assert.equal(getToolById('system-launcher').group, 'utility');
 assert.equal(getToolById('remote-terminal').group, 'utility');
 assert.equal(getToolById('rdp-history').risk, 'repair');
+assert.equal(getToolById('serial-debug').risk, 'repair');
 assert.ok(getToolGroups().network.length >= 40);
 console.log('tool catalog verified: ' + TOOL_CATALOG.length + ' entries');

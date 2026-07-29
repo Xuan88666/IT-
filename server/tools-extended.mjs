@@ -10,7 +10,7 @@ import http from 'node:http';
 import https from 'node:https';
 import tls from 'node:tls';
 import { join, extname } from 'node:path';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { stat, readdir } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { Resolver } from 'node:dns/promises';
@@ -320,13 +320,17 @@ export async function httpApiTest({ url, method = 'GET', headers = '', body = ''
   }
 }
 
+/* — PowerShell 字符串注入防护（单引号加倍 + 命令参数转义） — */
+const psQuote = (s) => String(s).replace(/'/g, "''");
+const psCmdArg = (s) => `"${String(s).replace(/["`$\\]/g, '`$&')}"`;
+
 /* SNMP 探测 */
 export async function snmpProbe({ host, community = 'public', oid = '1.3.6.1.2.1.1.5.0', port = 161, timeout = 5 }) {
   const target = String(host || '').trim();
   if (!target) return { ok: false, output: '请输入目标 IP 地址或主机名' };
   const targetPort = Math.min(Math.max(Number(port) || 161, 1), 65535);
   const to = Math.min(Math.max(Number(timeout) || 5, 1), 30);
-  return runPowerShell(`$exe = Get-Command snmpget -ErrorAction SilentlyContinue; if (-not $exe) { '未找到 snmpget 命令。Windows 可安装 Net-SNMP（https://www.netsnmp.org/）。' } else { & snmpget -v2c -c ${community} -t ${to} -r 1 -Oqv ${target}:${targetPort} ${oid} 2>&1 }`, 15000);
+  return runPowerShell(`$exe = Get-Command snmpget -ErrorAction SilentlyContinue; if (-not $exe) { '未找到 snmpget 命令。Windows 可安装 Net-SNMP（https://www.netsnmp.org/）。' } else { & snmpget -v2c -c ${psCmdArg(community)} -t ${to} -r 1 -Oqv ${psCmdArg(target)}:${targetPort} ${psCmdArg(oid)} 2>&1 }`, 15000);
 }
 
 /* WebSocket 测试 */
@@ -334,7 +338,7 @@ export async function websocketTest({ url, timeout = 10 }) {
   const target = String(url || '').trim();
   if (!target || !/^wss?:\/\//i.test(target)) return { ok: false, output: '请输入有效的 WebSocket URL，例如 ws://192.168.1.1:8080/ws' };
   const to = Math.min(Math.max(Number(timeout) || 10, 1), 60);
-  return runPowerShell(`try { Add-Type -AssemblyName System.Net.WebSockets.Client; $cts = New-Object System.Threading.CancellationTokenSource([TimeSpan]::FromSeconds(${to})); $client = New-Object System.Net.WebSockets.ClientWebSocket; $task = $client.ConnectAsync([System.Uri]::new('${target}'), $cts.Token); $task.Wait($cts.Token); if ($client.State -eq [System.Net.WebSockets.WebSocketState]::Open) { '✓ WebSocket 连接成功'; '状态：' + $client.State; '子协议：' + ($client.SubProtocol ?: '无'); $client.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, '测试完成', $cts.Token).Wait($cts.Token); '✓ 连接正常关闭' } else { '✗ 连接失败，状态：' + $client.State } } catch { '✗ WebSocket 测试失败：' + $_.Exception.Message }`, to * 1000 + 5000);
+  return runPowerShell(`try { Add-Type -AssemblyName System.Net.WebSockets.Client; $cts = New-Object System.Threading.CancellationTokenSource([TimeSpan]::FromSeconds(${to})); $client = New-Object System.Net.WebSockets.ClientWebSocket; $task = $client.ConnectAsync([System.Uri]::new('${psQuote(target)}'), $cts.Token); $task.Wait($cts.Token); if ($client.State -eq [System.Net.WebSockets.WebSocketState]::Open) { '✓ WebSocket 连接成功'; '状态：' + $client.State; '子协议：' + ($client.SubProtocol ?: '无'); $client.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, '测试完成', $cts.Token).Wait($cts.Token); '✓ 连接正常关闭' } else { '✗ 连接失败，状态：' + $client.State } } catch { '✗ WebSocket 测试失败：' + $_.Exception.Message }`, to * 1000 + 5000);
 }
 
 /* 反向 DNS 查询 (PTR) */
@@ -349,14 +353,15 @@ export async function tlsScan({ host, port = 443 }) {
   const target = String(host || '').trim();
   if (!target) return { ok: false, output: '请输入目标主机名或 IP' };
   const p = Math.min(Math.max(Number(port) || 443, 1), 65535);
-  return runPowerShell(`$target = '${target}'; $port = ${p}; $versions = @('Tls13','Tls12','Tls11','Tls'); $results = @(); foreach ($ver in $versions) { try { $tcp = New-Object System.Net.Sockets.TcpClient; $tcp.Connect($target, $port); $ssl = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, { $true }); $ssl.AuthenticateAsClient($target, $null, [System.Security.Authentication.SslProtocols]::$ver, $false); $cert = $ssl.RemoteCertificate; $cert2 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($cert); $results += [pscustomobject]@{ 版本=$ver; 成功=$true; 协商协议=$ssl.SslProtocol; 密码套件=$ssl.CipherAlgorithm; 密钥交换=$ssl.KeyExchangeAlgorithm; 证书主题=$cert2.Subject; 颁发者=$cert2.Issuer; 有效期至=$cert2.NotAfter; 剩余天数=(($cert2.NotAfter - (Get-Date)).Days) }; $ssl.Close(); $tcp.Close() } catch { $results += [pscustomobject]@{ 版本=$ver; 成功=$false; 错误=$_.Exception.Message } } }; '=== TLS/SSL 扫描结果 ==='; '目标：' + $target + ':' + $port; ''; $results | Format-Table -AutoSize`, 20000);
+  return runPowerShell(`$target = '${psQuote(target)}'; $port = ${p}; $versions = @('Tls13','Tls12','Tls11','Tls'); $results = @(); foreach ($ver in $versions) { try { $tcp = New-Object System.Net.Sockets.TcpClient; $tcp.Connect($target, $port); $ssl = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, { $true }); $ssl.AuthenticateAsClient($target, $null, [System.Security.Authentication.SslProtocols]::$ver, $false); $cert = $ssl.RemoteCertificate; $cert2 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($cert); $results += [pscustomobject]@{ 版本=$ver; 成功=$true; 协商协议=$ssl.SslProtocol; 密码套件=$ssl.CipherAlgorithm; 密钥交换=$ssl.KeyExchangeAlgorithm; 证书主题=$cert2.Subject; 颁发者=$cert2.Issuer; 有效期至=$cert2.NotAfter; 剩余天数=(($cert2.NotAfter - (Get-Date)).Days) }; $ssl.Close(); $tcp.Close() } catch { $results += [pscustomobject]@{ 版本=$ver; 成功=$false; 错误=$_.Exception.Message } } }; '=== TLS/SSL 扫描结果 ==='; '目标：' + $target + ':' + $port; ''; $results | Format-Table -AutoSize`, 20000);
 }
 
 /* 路由追踪分析增强 */
 export async function tracerouteAnalyze(host) {
   const target = String(host || '').trim();
   if (!target) return { ok: false, output: '请输入目标 IP 或域名' };
-  return runPowerShell(`$target = '${target}'; $output = tracert -d -h 30 $target 2>&1; $lines = $output -split '\\r?\\n'; $hops = @(); $starCount = 0; $prevIp = $null; $loopWarn = @(); foreach ($line in $lines) { if ($line -match '^\s*(\d+)\s+.*?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})') { $hop = [int]$matches[1]; $ip = $matches[2]; $hops += [pscustomobject]@{ 跳数=$hop; IP=$ip }; if ($prevIp -and $ip -eq $prevIp -and $starCount -ge 2) { $loopWarn += "跳 $hop 出现重复 IP $ip（可能环路）" } $starCount = 0; $prevIp = $ip } elseif ($line -match '请求超时|Request timed out') { $starCount++ } }; '=== 路由追踪分析 ==='; '目标：' + $target; ''; '路径摘要：'; $hops | ForEach-Object { '  跳 ' + $_.跳数.ToString().PadLeft(2) + ' -> ' + $_.IP }; if ($loopWarn.Count -gt 0) { ''; '⚠ 环路警告：'; $loopWarn } if ($starCount -gt 3) { ''; '⚠ 末尾多跳超时：可能是目标禁 ICMP 或存在黑洞' }; ''; '原始输出：'; $output`, 45000);
+  const escTarget = psQuote(target);
+  return runPowerShell(`$target = '${escTarget}'; $output = tracert -d -h 30 $target 2>&1; $lines = $output -split '\\r?\\n'; $hops = @(); $starCount = 0; $prevIp = $null; $loopWarn = @(); foreach ($line in $lines) { if ($line -match '^\s*(\d+)\s+.*?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})') { $hop = [int]$matches[1]; $ip = $matches[2]; $hops += [pscustomobject]@{ 跳数=$hop; IP=$ip }; if ($prevIp -and $ip -eq $prevIp -and $starCount -ge 2) { $loopWarn += "跳 $hop 出现重复 IP $ip（可能环路）" } $starCount = 0; $prevIp = $ip } elseif ($line -match '请求超时|Request timed out') { $starCount++ } }; '=== 路由追踪分析 ==='; '目标：' + $target; ''; '路径摘要：'; $hops | ForEach-Object { '  跳 ' + $_.跳数.ToString().PadLeft(2) + ' -> ' + $_.IP }; if ($loopWarn.Count -gt 0) { ''; '⚠ 环路警告：'; $loopWarn } if ($starCount -gt 3) { ''; '⚠ 末尾多跳超时：可能是目标禁 ICMP 或存在黑洞' }; ''; '原始输出：'; $output`, 45000);
 }
 
 /* MITM/ARP 欺骗提示 */
@@ -469,7 +474,8 @@ export async function hostDiscovery({ subnet }) {
 export async function loopDetection({ target }) {
   const t = String(target || '').trim();
   if (!t) return { ok: false, output: '请输入目标 IP 或域名' };
-  return runPowerShell(`$target = '${t}'; $output = tracert -d -h 15 $target 2>&1; $lines = $output -split '\\r?\\n'; $hops = @(); $seen = @{}; $loopWarn = @(); $starCount = 0; foreach ($line in $lines) { if ($line -match '^\s*(\d+)\s+.*?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})') { $hop = [int]$matches[1]; $ip = $matches[2]; $hops += "$hop -> $ip"; if ($seen[$ip]) { $loopWarn += "跳 $hop 出现重复 IP $ip（疑似环路）" } else { $seen[$ip] = $hop } $starCount = 0 } elseif ($line -match '请求超时|Request timed out') { $starCount++ } }; '=== 环路检测结果 ==='; '目标：' + $target; ''; '路径：'; $hops; if ($loopWarn.Count -gt 0) { ''; '⚠ 环路警告：'; $loopWarn } else { ''; '✓ 未发现明显环路迹象。' }; if ($starCount -gt 3) { ''; '⚠ 多跳超时：可能目标禁 ICMP 或存在路由黑洞' }`, 30000);
+  const escT = psQuote(t);
+  return runPowerShell(`$target = '${escT}'; $output = tracert -d -h 15 $target 2>&1; $lines = $output -split '\\r?\\n'; $hops = @(); $seen = @{}; $loopWarn = @(); $starCount = 0; foreach ($line in $lines) { if ($line -match '^\s*(\d+)\s+.*?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})') { $hop = [int]$matches[1]; $ip = $matches[2]; $hops += "$hop -> $ip"; if ($seen[$ip]) { $loopWarn += "跳 $hop 出现重复 IP $ip（疑似环路）" } else { $seen[$ip] = $hop } $starCount = 0 } elseif ($line -match '请求超时|Request timed out') { $starCount++ } }; '=== 环路检测结果 ==='; '目标：' + $target; ''; '路径：'; $hops; if ($loopWarn.Count -gt 0) { ''; '⚠ 环路警告：'; $loopWarn } else { ''; '✓ 未发现明显环路迹象。' }; if ($starCount -gt 3) { ''; '⚠ 多跳超时：可能目标禁 ICMP 或存在路由黑洞' }`, 30000);
 }
 
 /* ── 外网测速（Cloudflare 下载） ── */
@@ -682,7 +688,9 @@ export async function startFtpServer({ port = 2121, root = process.cwd(), user =
       const toNativePath = (ftpPath) => {
         let p = ftpPath.replace(/\\/g, '/');
         if (p.startsWith('/')) p = p.slice(1);
-        return join(rootDir, p);
+        const resolved = join(rootDir, p);
+        if (!resolved.startsWith(rootDir + '/') && resolved !== rootDir) throw new Error('Path traversal denied');
+        return resolved;
       };
 
       socket.on('data', (data) => {
@@ -816,7 +824,7 @@ export async function startFtpServer({ port = 2121, root = process.cwd(), user =
             if (!pasvSocket) return reply(425, 'Use PASV first');
             const storPath = toNativePath(resolvePath(arg));
             reply(150, 'Opening data connection');
-            const storStream = require('fs').createWriteStream(storPath);
+            const storStream = createWriteStream(storPath);
             pasvSocket.pipe(storStream);
             storStream.on('finish', () => reply(226, 'Transfer complete'));
             storStream.on('error', () => reply(550, 'Store failed'));
@@ -907,13 +915,15 @@ export async function startTftpServer({ port = 69, root = process.cwd() }) {
 
         stat(safePath).then(s => {
           if (!s.isFile()) throw new Error('Not a file');
-          const fileStream = require('fs').createReadStream(safePath);
+          const fileStream = createReadStream(safePath);
           const tid = ++sessionId;
           let blockNum = 1;
+          let lastChunkSize = 0;
           const bufSize = 512;
           const sendBuf = Buffer.alloc(bufSize + 4);
 
           fileStream.on('data', (chunk) => {
+            lastChunkSize = chunk.length;
             const pkt = Buffer.alloc(chunk.length + 4);
             pkt.writeUInt16BE(3, 0); // DATA
             pkt.writeUInt16BE(blockNum, 2);
@@ -923,14 +933,11 @@ export async function startTftpServer({ port = 69, root = process.cwd() }) {
           });
 
           fileStream.on('end', () => {
-            if (chunk.length === 0 || chunk.length < 512) {
-              // Last packet, send empty if needed
-              if (chunk.length === 512) {
-                const lastPkt = Buffer.alloc(4);
-                lastPkt.writeUInt16BE(3, 0);
-                lastPkt.writeUInt16BE(++blockNum, 2);
-                socket.send(lastPkt, rinfo.port, rinfo.address);
-              }
+            if (lastChunkSize === 512) {
+              const lastPkt = Buffer.alloc(4);
+              lastPkt.writeUInt16BE(3, 0);
+              lastPkt.writeUInt16BE(++blockNum, 2);
+              socket.send(lastPkt, rinfo.port, rinfo.address);
             }
           });
 
@@ -968,7 +975,7 @@ export async function startTftpServer({ port = 69, root = process.cwd() }) {
         ack.writeUInt16BE(0, 2);
         socket.send(ack, rinfo.port, rinfo.address);
 
-        const fileStream = require('fs').createWriteStream(safePath);
+        const fileStream = createWriteStream(safePath);
         const tid = ++sessionId;
         sessions.set(tid, { fileStream, address: rinfo.address, port: rinfo.port, blockNum: 0 });
       } else if (opcode === 4) { // ACK
@@ -1162,6 +1169,12 @@ export async function serviceDiscovery({ mdnsSec = 8, ssdpSec = 3 }) {
 
   const mdnsSocket = dgram.createSocket('udp4');
   const mdnsMessages = [];
+  let mdnsError = null;
+
+  mdnsSocket.on('error', (err) => {
+    mdnsError = err;
+    mdnsSocket.close();
+  });
 
   mdnsSocket.on('message', (msg) => {
     try {
@@ -1182,8 +1195,9 @@ export async function serviceDiscovery({ mdnsSec = 8, ssdpSec = 3 }) {
   });
 
   mdnsSocket.bind(5353, '0.0.0.0', () => {
+    if (mdnsError) return;
     mdnsSocket.setBroadcast(true);
-    mdnsSocket.addMembership('224.0.0.251');
+    try { mdnsSocket.addMembership('224.0.0.251'); } catch {} // 无多播接口时忽略
 
     // Send mDNS queries
     mdnsTypes.forEach(type => {
@@ -1223,6 +1237,7 @@ export async function serviceDiscovery({ mdnsSec = 8, ssdpSec = 3 }) {
   // SSDP discovery
   const ssdpSocket = dgram.createSocket('udp4');
   const ssdpMessages = [];
+  ssdpSocket.on('error', () => { ssdpSocket.close(); });
 
   ssdpSocket.on('message', (msg) => {
     const str = msg.toString('utf8');
@@ -1280,6 +1295,8 @@ export async function serviceDiscovery({ mdnsSec = 8, ssdpSec = 3 }) {
 
 /* ── DHCP 服务器 ── */
 const activeDhcpServers = new Map();
+const ipToNum = (ip) => { const p = ip.split('.'); return ((+p[0]||0)*16777216 + (+p[1]||0)*65536 + (+p[2]||0)*256 + (+p[3]||0)) >>> 0; };
+const validIp4 = (ip) => /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && ip.split('.').every((v) => { const n = +v; return n >= 0 && n <= 255; });
 
 export function getActiveDhcpServers() {
   return Array.from(activeDhcpServers.entries()).map(([port, info]) => ({
@@ -1293,82 +1310,86 @@ export function getActiveDhcpServers() {
 }
 
 export async function startDhcpServer({ port = 67, subnet = '192.168.1.0/24', gateway = '192.168.1.1', startIp = '192.168.1.100', endIp = '192.168.1.200', dns = '8.8.8.8' }) {
+  port = Math.min(Math.max(Number(port) || 67, 1), 65535);
   if (activeDhcpServers.has(port)) {
     return { ok: false, output: `DHCP 服务器已在端口 ${port} 运行` };
   }
+  if (!validIp4(gateway)) return { ok: false, output: `网关地址无效：${gateway}` };
+  if (!validIp4(startIp)) return { ok: false, output: `起始 IP 无效：${startIp}` };
+  if (!validIp4(endIp)) return { ok: false, output: `结束 IP 无效：${endIp}` };
+  if (!dns || !dns.split(',').every((s) => validIp4(s.trim()))) return { ok: false, output: `DNS 地址无效：${dns}` };
+  if (!/^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(subnet)) return { ok: false, output: `子网格式无效：${subnet}` };
+  if (ipToNum(startIp) >= ipToNum(endIp)) return { ok: false, output: '起始 IP 必须小于结束 IP' };
 
   try {
-    const dgram = await import('dgram');
-    const socket = dgram.createSocket('udp4');
+    const dgramMod = await import('dgram');
+    const socket = dgramMod.createSocket('udp4');
     const leases = new Map();
-    let nextIp = startIp;
+    let nextIpNum = ipToNum(startIp);
+    const endIpNum = ipToNum(endIp);
 
     socket.on('message', (msg, rinfo) => {
       if (msg.length < 240) return;
       const op = msg.readUInt8(0);
+      if (op !== 1) return; // 只处理 DISCOVER 和 REQUEST
 
-      if (op === 1) {
-        const transactionId = msg.slice(4, 8);
-        const clientMac = msg.slice(28, 34).toString('hex').toUpperCase().replace(/(.{2})/g, '$1:');
-        
-        if (!leases.has(clientMac)) {
-          leases.set(clientMac, { ip: nextIp, time: Date.now() });
-          const parts = nextIp.split('.');
-          parts[3] = String(parseInt(parts[3]) + 1);
-          nextIp = parts.join('.');
-          if (nextIp > endIp) nextIp = startIp;
-        }
+      const transactionId = msg.slice(4, 8);
+      const clientMac = msg.slice(28, 34).toString('hex').toUpperCase().replace(/(.{2})/g, '$1:');
 
-        const lease = leases.get(clientMac);
-        const ipParts = lease.ip.split('.').map(Number);
-
-        const response = Buffer.alloc(240);
-        response.writeUInt8(2, 0);
-        response.writeUInt8(1, 1);
-        response.writeUInt8(6, 2);
-        response.writeUInt8(0, 3);
-        transactionId.copy(response, 4);
-        response.writeUInt32BE(0, 8);
-        response.writeUInt32BE(0, 12);
-        
-        msg.slice(16, 24).copy(response, 16);
-        response.writeUInt32BE(0, 24);
-        
-        response.writeUInt8(ipParts[0], 28);
-        response.writeUInt8(ipParts[1], 29);
-        response.writeUInt8(ipParts[2], 30);
-        response.writeUInt8(ipParts[3], 31);
-        
-        response.writeUInt8(0, 32);
-        response.writeUInt8(0, 33);
-        response.writeUInt8(0, 34);
-        response.writeUInt8(0, 35);
-        
-        const gwParts = gateway.split('.').map(Number);
-        response.writeUInt8(gwParts[0], 36);
-        response.writeUInt8(gwParts[1], 37);
-        response.writeUInt8(gwParts[2], 38);
-        response.writeUInt8(gwParts[3], 39);
-        
-        const subnetParts = subnet.split('/')[0].split('.').map(Number);
-        const maskBits = parseInt(subnet.split('/')[1]) || 24;
-        const mask = [];
-        for (let i = 0; i < 4; i++) mask.push((maskBits >= 8 ? 255 : (maskBits > 0 ? (256 - Math.pow(2, 8 - maskBits)) : 0)), maskBits = Math.max(0, maskBits - 8));
-        response.writeUInt8(mask[0], 40);
-        response.writeUInt8(mask[1], 41);
-        response.writeUInt8(mask[2], 42);
-        response.writeUInt8(mask[3], 43);
-        
-        response.writeUInt32BE(86400, 44);
-        
-        const dnsParts = dns.split('.').map(Number);
-        response.writeUInt8(dnsParts[0], 156);
-        response.writeUInt8(dnsParts[1], 157);
-        response.writeUInt8(dnsParts[2], 158);
-        response.writeUInt8(dnsParts[3], 159);
-
-        socket.send(response, 68, rinfo.address);
+      if (!leases.has(clientMac)) {
+        const assignedIp = [0,0,0,0].map((_, i) => ((nextIpNum >> (24 - i * 8)) & 0xFF));
+        leases.set(clientMac, { ip: assignedIp.join('.'), time: Date.now() });
+        nextIpNum++;
+        if (nextIpNum > endIpNum) nextIpNum = ipToNum(startIp);
       }
+
+      const lease = leases.get(clientMac);
+      const ipParts = lease.ip.split('.').map(Number);
+
+      const response = Buffer.alloc(240);
+      response.writeUInt8(2, 0); // BOOTREPLY
+      response.writeUInt8(1, 1); // Ethernet
+      response.writeUInt8(6, 2); // MAC length
+      response.writeUInt8(0, 3); // Hops
+      transactionId.copy(response, 4);
+      // yiaddr = lease IP
+      response.writeUInt8(ipParts[0], 28);
+      response.writeUInt8(ipParts[1], 29);
+      response.writeUInt8(ipParts[2], 30);
+      response.writeUInt8(ipParts[3], 31);
+
+      const gwParts = gateway.split('.').map(Number);
+      response.writeUInt8(gwParts[0], 36); // siaddr
+      response.writeUInt8(gwParts[1], 37);
+      response.writeUInt8(gwParts[2], 38);
+      response.writeUInt8(gwParts[3], 39);
+
+      const submask = subnet.split('/')[1] || 24;
+      const maskParts = [];
+      for (let i = 0; i < 4; i++) {
+        const bits = Math.min(Math.max(+submask - i * 8, 0), 8);
+        maskParts.push(bits === 8 ? 255 : (256 - (1 << (8 - bits))));
+      }
+      response.writeUInt8(maskParts[0], 40);
+      response.writeUInt8(maskParts[1], 41);
+      response.writeUInt8(maskParts[2], 42);
+      response.writeUInt8(maskParts[3], 43);
+
+      response.writeUInt32BE(86400, 44); // lease time
+
+      const dnsParts = dns.split(',').map((s) => s.trim().split('.').map(Number))[0];
+      response.writeUInt8(dnsParts[0], 156);
+      response.writeUInt8(dnsParts[1], 157);
+      response.writeUInt8(dnsParts[2], 158);
+      response.writeUInt8(dnsParts[3], 159);
+
+      // DHCP message type = OFFER (option 53)
+      const opt53off = 240;
+      response.writeUInt8(53, opt53off); response.writeUInt8(1, opt53off + 1); response.writeUInt8(2, opt53off + 2); // 2=OFFER
+      const optEnd = opt53off + 3;
+      response.writeUInt8(255, optEnd); // End option
+
+      socket.send(response, 0, optEnd + 1, 68, rinfo.address);
     });
 
     socket.on('error', () => {});
@@ -1378,12 +1399,13 @@ export async function startDhcpServer({ port = 67, subnet = '192.168.1.0/24', ga
         socket.setBroadcast(true);
         resolve();
       });
-      socket.on('error', reject);
+      socket.on('error', (err) => { if (!socket.__bound) reject(err); });
     });
+    socket.__bound = true;
 
     activeDhcpServers.set(port, { socket, subnet, gateway, startIp, endIp, dns, leases, startTime: new Date().toLocaleString() });
 
-    return { ok: true, output: `DHCP 服务器已启动 (端口 ${port})\n子网: ${subnet}\n网关: ${gateway}\nIP范围: ${startIp} - ${endIp}\nDNS: ${dns}` };
+    return { ok: true, output: `[高危] DHCP 服务器已在端口 ${port} 启动（绑定 0.0.0.0，全网可达）。\n子网: ${subnet}\n网关: ${gateway}\nIP范围: ${startIp} - ${endIp}\nDNS: ${dns}\n注意：此功能是 rogue DHCP，使用后请立即用 /api/tools/stop-dhcp-server 停止。` };
   } catch (err) {
     return { ok: false, output: `DHCP 服务器启动失败: ${err.message}\n请使用管理员权限运行或更换端口` };
   }

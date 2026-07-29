@@ -43,7 +43,7 @@ setlocal
 cd /d "%~dp0app"
 start "IT Ops Toolbox" /min "%~dp0runtime\node.exe" server.mjs
 timeout /t 3 /nobreak >nul
-start "" http://127.0.0.1:8787/
+start "" http://127.0.0.1:3000/
 '@
 [System.IO.File]::WriteAllText((Join-Path $packageRoot 'Start-IT-Ops-Toolbox.cmd'), $launcher, [System.Text.Encoding]::ASCII)
 
@@ -58,7 +58,7 @@ $notice = @"
 IT Ops Toolbox Portable Edition
 
 1. Double click Start-IT-Ops-Toolbox.cmd.
-2. Open http://127.0.0.1:8787/ in a browser.
+2. Open http://127.0.0.1:3000/ in a browser.
 3. Data is stored in app\data. Export ITOpsToolboxBackup/2 regularly.
 4. Create app\.env from app\.env.example for AI settings. No development secret is included.
 5. Double click Stop-IT-Ops-Toolbox.cmd to stop only this portable package Node process.

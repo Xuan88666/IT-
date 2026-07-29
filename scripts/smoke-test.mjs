@@ -355,6 +355,15 @@ try {
     const script = await (await request('/app.js')).text();
     for (const marker of ['packet-capture', 'pcap-analyzer', 'loadNdFileParam', 'downloadNdBinary']) if (!script.includes(marker)) throw new Error(`抓包工作台缺少前端能力：${marker}`);
   });
+  await check('串口终端扫描、输入校验和权限边界可用', async () => {
+    const ports = await json('/api/serial/ports', { headers: adminHeaders() });
+    if (!Array.isArray(ports.ports)) throw new Error('串口扫描未返回列表');
+    await request('/api/serial/sessions', { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ port: 'COM0', baud: 9600 }) }, 400);
+    const sessions = await json('/api/serial/sessions', { headers: adminHeaders() });
+    if (!Array.isArray(sessions)) throw new Error('串口会话列表未返回数组');
+    const script = await (await request('/app.js')).text();
+    for (const marker of ['/api/serial/ports', 'openSerialTerminal', 'sendSerialTerminalInput', 'closeSerialTerminal']) if (!script.includes(marker)) throw new Error(`前端缺少串口终端能力：${marker}`);
+  });
   await check('远程管理支持真实 Telnet 会话、输入输出和脱敏历史', async () => {
     let stage = 0;
     const mockTelnet = createServer((socket) => {
@@ -449,6 +458,7 @@ try {
     await request('/api/tools/repair-network', { method: 'POST', headers: viewerHeaders(), body: JSON.stringify({}) }, 403);
     await request('/api/tools/external/launch', { method: 'POST', headers: viewerHeaders(), body: JSON.stringify({ id: 'wireshark' }) }, 403);
     await request('/api/remote/sessions', { method: 'POST', headers: viewerHeaders(), body: JSON.stringify({ protocol: 'telnet', host: '127.0.0.1', port: 23 }) }, 403);
+    await request('/api/serial/sessions', { method: 'POST', headers: viewerHeaders(), body: JSON.stringify({ port: 'COM0', baud: 9600 }) }, 403);
     await request('/api/tools/wifi-profile-export', { method: 'POST', headers: viewerHeaders(), body: JSON.stringify({ reveal: true, confirmed: true }) }, 403);
     await request('/api/packet-capture/start', { method: 'POST', headers: viewerHeaders(), body: JSON.stringify({ confirmed: true, durationSeconds: 5 }) }, 403);
     await request('/api/tools/firewall-manager', { method: 'POST', headers: viewerHeaders(), body: JSON.stringify({ action: 'list' }) }, 403);

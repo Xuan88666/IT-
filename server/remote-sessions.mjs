@@ -104,7 +104,8 @@ export class RemoteSessionManager {
 
   async saveHistory() {
     const snapshot = JSON.stringify((this.history || []).slice(0, 200), null, 2);
-    this.historyWrite = this.historyWrite.then(async () => {
+    // 链中用 catch 吞掉保证不会被毒化——单次失败不影响后续写入
+    this.historyWrite = this.historyWrite.catch(() => {}).then(async () => {
       await mkdir(dirname(this.historyPath), { recursive: true });
       const temporary = `${this.historyPath}.tmp`;
       await writeFile(temporary, snapshot, 'utf8');
@@ -199,6 +200,8 @@ export class RemoteSessionManager {
           this.append(session, `[SSH] 已连接 ${session.host}:${session.port}\n`);
           stream.on('data', data => this.append(session, data));
           stream.stderr?.on('data', data => this.append(session, data));
+          stream.on('error', (err) => this.markClosed(session, `SSH 流错误：${err.message}`));
+          stream.stderr?.on('error', () => {});
           stream.on('close', () => this.markClosed(session, 'SSH 远端已关闭会话。'));
           if (!settled) { settled = true; resolve(); }
         });
@@ -281,6 +284,7 @@ export class RemoteSessionManager {
     session.status = session.status === 'error' ? 'error' : 'closed';
     session.closedAt ||= new Date().toISOString();
     this.append(session, `${message}\n`);
+    this.#gcSessions();
   }
 
   destroyTransport(session) {
@@ -305,7 +309,7 @@ export class RemoteSessionManager {
     if (session.status !== 'connected' || !session.stream) throw new Error('远程会话当前未连接。');
     const input = String(data || '');
     if (!input || input.length > MAX_INPUT_LENGTH) throw new Error(`单次输入必须为 1-${MAX_INPUT_LENGTH} 个字符。`);
-    session.stream.write(input);
+    try { session.stream.write(input); } catch { this.markClosed(session, 'SSH 连接异常中断。'); throw new Error('远程会话连接异常中断。'); }
     return this.sessionView(session);
   }
 
@@ -315,7 +319,22 @@ export class RemoteSessionManager {
     session.closedAt = new Date().toISOString();
     this.append(session, '会话已由用户断开。\n');
     this.destroyTransport(session);
+    this.#gcSessions();
     return this.sessionView(session);
+  }
+
+  #gcSessions() {
+    // 清理已关闭的会话、清空其 output 释放内存，最多保留 5 条最近关闭的可读记录
+    let closedCount = 0;
+    for (const [id, session] of this.sessions) {
+      if (session.status === 'closed' || session.status === 'error') {
+        closedCount++;
+        if (closedCount > 5) {
+          session.output = []; // 释放输出缓冲区
+          this.sessions.delete(id);
+        }
+      }
+    }
   }
 
   closeAll() {

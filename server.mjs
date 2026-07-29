@@ -25,6 +25,7 @@ import { loadProvidersFromEnv, maskApiKey } from './server/ai/providers-config.m
 import { createRateLimitStore } from './server/rate-limit.mjs';
 import { RemoteSessionManager, validRemoteHost, normalizeRemotePort } from './server/remote-sessions.mjs';
 import { PacketCaptureManager, analyzeCaptureBuffer, MAX_UPLOAD_BYTES } from './server/packet-capture.mjs';
+import { SerialSessionManager } from './server/serial-sessions.mjs';
 import { extendedTools, extendedAgentTools, extendedAgentAllowlist, executeExtendedAgentTool, extendedAgentDisplayNames, sendWakeOnLan, lookupMacVendor, connTracker, domainWhois, httpApiTest, snmpProbe, websocketTest, ptrLookup, tlsScan, tracerouteAnalyze, mitmHints, netflowListen, subnetCalc, routeTable, firewallStatus, portOccupancy, ipInfo, dhcpDetect, hostDiscovery, loopDetection, speedTest, networkHealth, arpTable, portServiceProbe, tempHttpServer, stopTempHttpServer, getActiveTempServers, startFtpServer, stopFtpServer, getActiveFtpServers, startTftpServer, stopTftpServer, getActiveTftpServers, startSyslogServer, stopSyslogServer, getSyslogMessages, getActiveSyslogServers, cameraScan, serviceDiscovery, startDhcpServer, stopDhcpServer, getActiveDhcpServers, lanSpeedTest, pingQoS, routePolicy, connectionTest, dnsBenchmark, ipConflictCheck, networkTrafficSample, wifiChannelAnalysis, wifiProfileExport, linkMonitorSample, sendMonitorWebhook } from './server/tools-extended.mjs';
 
 const require = createRequire(import.meta.url);
@@ -37,6 +38,7 @@ const port = Number(process.env.PORT || 3000);
 const dataDir = process.env.IT_OPS_TOOLBOX_DATA_DIR || process.env.OPSHUB_DATA_DIR ? normalize(process.env.IT_OPS_TOOLBOX_DATA_DIR || process.env.OPSHUB_DATA_DIR) : join(root, 'data');
 const remoteSessions = new RemoteSessionManager({ historyPath: join(dataDir, 'remote-history.json') });
 const packetCapture = new PacketCaptureManager({ dataDir });
+const serialSessions = new SerialSessionManager({ historyPath: join(dataDir, 'serial-history.json') });
 const evidenceDir = join(dataDir, 'evidence');
 const ocrCacheDir = join(dataDir, 'ocr-cache');
 const aiSessionsDir = join(dataDir, 'ai-sessions');
@@ -607,6 +609,7 @@ function requiredPermission(pathname, method) {
   if (pathname === '/api/audits') return 'audit_read';
   if (pathname.startsWith('/api/backup/')) return 'backup_manage';
   if (pathname.startsWith('/api/remote/')) return method === 'GET' ? 'data_read' : 'launcher_run';
+  if (pathname.startsWith('/api/serial/')) return method === 'GET' ? 'data_read' : 'launcher_run';
   if (pathname === '/api/packet-capture/start' || pathname === '/api/packet-capture/stop') return 'repair_run';
   if (pathname.startsWith('/api/packet-capture/')) return 'data_read';
   if (pathname === '/api/tools/external/launch') return 'launcher_run';
@@ -1994,6 +1997,44 @@ async function handleApi(req, res, pathname) {
     const path = await findExternalTool(tool); if (!path) return send(res, 404, { ok: false, output: `${tool.name} 未安装或未加入 PATH。` });
     const child = spawn(path, [], { detached: true, stdio: 'ignore', windowsHide: false }); child.unref(); return send(res, 200, { ok: true, output: `已启动 ${tool.name}` });
   }
+  if (pathname === '/api/serial/ports' && req.method === 'GET') {
+    try { return send(res, 200, { ok: true, ports: await serialSessions.listPorts() }); }
+    catch (error) { return send(res, 500, { ok: false, output: error.message }); }
+  }
+  if (pathname === '/api/serial/sessions' && req.method === 'GET') return send(res, 200, serialSessions.list(auth.user.id));
+  if (pathname === '/api/serial/sessions' && req.method === 'POST') {
+    try {
+      const session = await serialSessions.create(auth.user.id, body);
+      await recordAudit({ type: '串口终端', action: `打开串口 ${session.port}`, ok: true, issue: `操作人：${auth.user.username}`, output: `${session.baud}/${session.dataBits}${session.parity}/${session.stopBits}；收发内容不写入审计。` });
+      return send(res, 201, session);
+    } catch (error) {
+      await recordAudit({ type: '串口终端', action: `打开串口 ${String(body.port || '').slice(0, 24)}`, ok: false, issue: `操作人：${auth.user.username}`, output: error.message });
+      return send(res, 400, { ok: false, output: error.message });
+    }
+  }
+  if (pathname === '/api/serial/history' && req.method === 'GET') return send(res, 200, await serialSessions.listHistory(auth.user.id));
+  if (pathname.startsWith('/api/serial/history/') && req.method === 'DELETE') {
+    try { await serialSessions.deleteHistory(auth.user.id, decodeURIComponent(pathname.slice('/api/serial/history/'.length))); return send(res, 200, { ok: true, output: '串口历史已删除。' }); }
+    catch (error) { return send(res, 404, { ok: false, output: error.message }); }
+  }
+  const serialOutputMatch = pathname.match(/^\/api\/serial\/sessions\/([^/]+)\/output$/);
+  if (serialOutputMatch && req.method === 'GET') {
+    const after = new URL(req.url, 'http://127.0.0.1').searchParams.get('after') || 0;
+    try { return send(res, 200, serialSessions.output(auth.user.id, decodeURIComponent(serialOutputMatch[1]), after)); }
+    catch (error) { return send(res, 404, { ok: false, output: error.message }); }
+  }
+  const serialInputMatch = pathname.match(/^\/api\/serial\/sessions\/([^/]+)\/input$/);
+  if (serialInputMatch && req.method === 'POST') {
+    try { return send(res, 200, await serialSessions.send(auth.user.id, decodeURIComponent(serialInputMatch[1]), body)); }
+    catch (error) { return send(res, 400, { ok: false, output: error.message }); }
+  }
+  if (pathname.startsWith('/api/serial/sessions/') && req.method === 'DELETE') {
+    try {
+      const session = await serialSessions.close(auth.user.id, decodeURIComponent(pathname.slice('/api/serial/sessions/'.length)));
+      await recordAudit({ type: '串口终端', action: `关闭串口 ${session.port}`, ok: true, issue: `操作人：${auth.user.username}`, output: `会话 ${session.id} 已关闭；收发内容未写入审计。` });
+      return send(res, 200, session);
+    } catch (error) { return send(res, 404, { ok: false, output: error.message }); }
+  }
   if (pathname === '/api/packet-capture/status' && req.method === 'GET') {
     const result = await packetCapture.status();
     const latest = result.active || result.captures[0] || null;
@@ -2027,7 +2068,7 @@ async function handleApi(req, res, pathname) {
   const captureFileMatch = pathname.match(/^\/api\/packet-capture\/files\/([A-Za-z0-9-]+)$/);
   if (captureFileMatch && req.method === 'GET') {
     try {
-      const file = await packetCapture.file(captureFileMatch[1]);
+      const file = await packetCapture.file(captureFileMatch[1], user?.id);
       res.writeHead(200, { 'Content-Type': 'application/x-pcapng', 'Content-Disposition': `attachment; filename="${file.record.id}.pcapng"`, 'Content-Length': file.data.length, 'Cache-Control': 'no-store' });
       return res.end(file.data);
     } catch (error) { return send(res, 404, { ok: false, output: error.message }); }
@@ -2947,6 +2988,7 @@ async function shutdownServer() {
   if (serverClosing) return;
   serverClosing = true;
   await packetCapture.shutdown();
+  await serialSessions.closeAll();
   webServer.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 5000).unref();
 }

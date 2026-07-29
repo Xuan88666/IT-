@@ -31,9 +31,10 @@ const legacyTools = [
     'service-status', 'spooler-start', 'system-errors', 'time-sync', 'workstation-health',
   ]),
   ...createTools('utility', [
-    'cable-order', 'hex-convert', 'open-web', 'password-gen', 'rdp', 'serial-debug',
+    'cable-order', 'hex-convert', 'open-web', 'password-gen', 'rdp',
     'telnet-client',
   ]),
+  { id: 'serial-debug', group: 'utility', risk: 'repair', legacy: true, keywords: ['串口', 'COM', 'RS232', 'RS485'] },
 ];
 
 const newTools = [

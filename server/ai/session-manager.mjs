@@ -2,12 +2,14 @@
  * SessionManager - 会话持久化管理
  * 将 AI 对话会话保存为 JSON 文件，支持重启后恢复
  */
-import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, unlink, mkdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 export class SessionManager {
   constructor(sessionsDir) {
     this.sessionsDir = sessionsDir; // data/ai-sessions/
+    this.writeQueues = new Map(); // sessionId -> Promise 链，串行化同一会话的写入
   }
 
   /**
@@ -37,24 +39,27 @@ export class SessionManager {
    * @returns {Promise<Object|null>}
    */
   async loadSession(sessionId) {
+    // 防止路径穿越攻击
+    if (!this.isValidSessionId(sessionId)) {
+      return null;
+    }
+
+    const filePath = join(this.sessionsDir, `${sessionId}.json`);
+    let content;
     try {
-      // 防止路径穿越攻击
-      if (!this.isValidSessionId(sessionId)) {
-        return null;
-      }
-
-      const filePath = join(this.sessionsDir, `${sessionId}.json`);
-      const content = await readFile(filePath, 'utf-8');
+      content = await readFile(filePath, 'utf-8');
+    } catch (error) {
+      if (error.code === 'ENOENT') return null; // 会话确实不存在
+      throw error; // IO 错误不能当作"不存在"处理，否则调用方会静默新建会话丢失历史
+    }
+    try {
       const session = JSON.parse(content);
-
       // 验证会话结构
-      if (!session.id || !session.createdAt) {
-        return null;
-      }
-
+      if (!session.id || !session.createdAt) return null;
       return session;
     } catch {
-      return null;
+      // 文件损坏：抛错而非返回 null，避免调用方覆盖原文件
+      throw new Error(`会话文件损坏：${sessionId}`);
     }
   }
 
@@ -63,13 +68,22 @@ export class SessionManager {
    * @param {Object} session
    */
   async saveSession(session) {
+    if (!this.isValidSessionId(session.id)) {
+      throw new Error('Invalid session ID');
+    }
+    // 同一会话的写入串行化，避免并发读改写互相覆盖；链上错误被吞掉以免毒化队列
+    const previous = this.writeQueues.get(session.id) || Promise.resolve();
+    const task = previous.catch(() => {}).then(() => this.#writeSessionFile(session));
+    this.writeQueues.set(session.id, task);
+    task.finally(() => {
+      if (this.writeQueues.get(session.id) === task) this.writeQueues.delete(session.id);
+    }).catch(() => {});
+    return task;
+  }
+
+  async #writeSessionFile(session) {
     try {
       await mkdir(this.sessionsDir, { recursive: true });
-
-      if (!this.isValidSessionId(session.id)) {
-        throw new Error('Invalid session ID');
-      }
-
       const filePath = join(this.sessionsDir, `${session.id}.json`);
       session.updatedAt = new Date().toISOString();
 
@@ -79,7 +93,15 @@ export class SessionManager {
         throw new Error('Session file too large (>10MB)');
       }
 
-      await writeFile(filePath, content, 'utf-8');
+      // 原子写入：先写临时文件再 rename，读取方不会看到半截 JSON
+      const tempPath = `${filePath}.${randomBytes(4).toString('hex')}.tmp`;
+      await writeFile(tempPath, content, 'utf-8');
+      try {
+        await rename(tempPath, filePath);
+      } catch (error) {
+        await unlink(tempPath).catch(() => {});
+        throw error;
+      }
     } catch (error) {
       console.error('Failed to save session:', error.message);
       throw error;

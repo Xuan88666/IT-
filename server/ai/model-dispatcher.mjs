@@ -155,11 +155,13 @@ export class ModelDispatcher {
     });
 
     if (response.statusCode !== 200) {
-      const errorData = response.body ? JSON.parse(response.body) : {};
+      let errorData = {};
+      try { errorData = response.body ? JSON.parse(response.body) : {}; } catch { /* 非 JSON 错误体 */ }
       throw new Error(errorData?.error?.message || `HTTP ${response.statusCode}`);
     }
 
-    const result = JSON.parse(response.body);
+    let result;
+    try { result = JSON.parse(response.body); } catch { throw new Error(`Provider 返回非 JSON 响应：${(response.body || '').slice(0, 200)}`); }
     this._updateUsage(provider, result.usage);
     return result;
   }
@@ -251,10 +253,24 @@ export class ModelDispatcher {
         headers: options.headers || {}
       };
 
+      const MAX_RESPONSE_BYTES = 16 * 1024 * 1024; // 16MB 硬上限
+      let totalBodyBytes = 0;
+      let timedOut = false;
+      const overallTimer = options.timeout ? setTimeout(() => { timedOut = true; req.destroy(new Error('Request timeout')); }, options.timeout) : null;
+
       const req = client.request(reqOptions, (res) => {
         let data = '';
-        res.on('data', (chunk) => (data += chunk));
+        res.on('data', (chunk) => {
+          totalBodyBytes += chunk.length;
+          if (totalBodyBytes > MAX_RESPONSE_BYTES) {
+            req.destroy(new Error(`Response too large (>${MAX_RESPONSE_BYTES} bytes)`));
+            return;
+          }
+          data += chunk;
+        });
         res.on('end', () => {
+          if (timedOut) return;
+          clearTimeout(overallTimer);
           resolve({
             statusCode: res.statusCode,
             headers: res.headers,
@@ -263,14 +279,7 @@ export class ModelDispatcher {
         });
       });
 
-      req.on('error', reject);
-
-      if (options.timeout) {
-        req.setTimeout(options.timeout, () => {
-          req.destroy();
-          reject(new Error('Request timeout'));
-        });
-      }
+      req.on('error', (err) => { clearTimeout(overallTimer); reject(timedOut ? new Error('Request timeout') : err); });
 
       if (options.body) {
         req.write(options.body);

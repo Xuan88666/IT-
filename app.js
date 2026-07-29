@@ -89,6 +89,7 @@ const linkMonitorRuntime = {
   lines: [],
 };
 const packetCaptureRuntime = { poller: null, captureId: null, startedAt: 0 };
+const serialTerminalRuntime = { ports: [], session: null, cursor: 0, lines: [], poller: null, loadingPorts: false };
 const remoteWorkbench = {
   protocol: 'ssh',
   host: '',
@@ -1434,43 +1435,36 @@ async function runTopology() {
 }
 
 async function connectRdp() {
-  clearOutput();
-  const host = document.getElementById('rdp-host')?.value || '192.168.1.100';
-  const port = parseInt(document.getElementById('rdp-port')?.value || '3389');
-  const user = document.getElementById('rdp-user')?.value || 'administrator';
-  const res = document.getElementById('rdp-res')?.value || '1920x1080';
-  appendOutput(`=== 远程桌面连接 ===`, 'info');
-  appendOutput(`目标: ${host}:${port}`, 'info');
-  appendOutput(`用户: ${user}`, 'info');
-  appendOutput(`分辨率: ${res}`, 'info');
-  appendOutput('正在连接...', 'info');
-  await new Promise(r => setTimeout(r, 1500));
-  appendOutput('✓ 连接成功（模拟）', 'success');
-  appendOutput('提示: 实际部署时将调用 mstsc.exe 或 xfreerdp', 'warning');
+  state.page = 'remote';
+  render();
+  loadRemoteWorkbench();
+  showToast('已打开真实远程管理工作台，请在 RDP 页签发起连接');
 }
 
 async function openSerial() {
-  clearOutput();
-  const port = document.getElementById('serial-port')?.value || 'COM1';
-  const baud = parseInt(document.getElementById('serial-baud')?.value || '9600');
-  appendOutput(`=== 打开串口 ===`, 'info');
-  appendOutput(`串口: ${port}`, 'info');
-  appendOutput(`波特率: ${baud}`, 'info');
-  await new Promise(r => setTimeout(r, 500));
-  appendOutput(`✓ ${port} 已打开`, 'success');
-  appendOutput('等待数据...', 'info');
+  state.page = 'network';
+  state.activeTool = { id: 'serial-debug', name: '串口调试', desc: '真实 COM 串口收发、日志与会话管理' };
+  state.ndToolParams = {
+    port: document.getElementById('serial-port')?.value || 'COM1',
+    baud: document.getElementById('serial-baud')?.value || '9600',
+    dataBits: document.getElementById('serial-data')?.value || '8',
+    stopBits: document.getElementById('serial-stop')?.value || '1',
+    parity: document.getElementById('serial-parity')?.value || 'none',
+    displayMode: 'text', inputFormat: 'text', lineEnding: 'crlf',
+  };
+  state.ndOutput = null;
+  render();
+  loadSerialPorts();
+  showToast('已切换到真实串口工作台，请点击开始执行打开端口');
 }
 
-async function closeSerial() { appendOutput('串口已关闭', 'warning'); }
+async function closeSerial() { await closeSerialTerminal(); }
 
 async function scanSerial() {
-  clearOutput();
-  appendOutput(`=== 扫描可用串口 ===`, 'info');
-  await new Promise(r => setTimeout(r, 500));
-  appendOutput('  COM1  - 可用', 'success');
-  appendOutput('  COM3  - 可用', 'success');
-  appendOutput('  COM5  - 可用 (USB-RS485)', 'success');
-  appendOutput('=== 串口扫描完成 ===', 'info');
+  state.page = 'network';
+  state.activeTool = { id: 'serial-debug', name: '串口调试', desc: '真实 COM 串口收发、日志与会话管理' };
+  render();
+  await loadSerialPorts(false);
 }
 
 async function runDiskHealth() {
@@ -3904,6 +3898,9 @@ function renderNetworkPage() {
       { id: 'ip-conflict-check', name: 'IP 冲突检查', desc: '事件日志与邻居表证据' },
       { id: 'security-check', name: '安全自测', desc: '端口/权限检测' },
     ]},
+    { name: '现场终端', icon: 'terminal-square', tools: [
+      { id: 'serial-debug', name: '串口调试', desc: '真实 COM 串口收发、日志与会话管理' },
+    ]},
     { name: '临时服务', icon: 'server', tools: [
       { id: 'temp-http-server', name: '临时HTTP', desc: '文件共享服务' },
       { id: 'ftp-server', name: 'FTP服务器', desc: '临时文件传输' },
@@ -3988,7 +3985,7 @@ function renderNetworkPage() {
               </div>
               
               <div class="bento-nd-output-body">
-                ${state.isToolRunning && !['flow-monitor', 'link-monitor'].includes(activeTool.id) ? `
+                ${state.isToolRunning && !['flow-monitor', 'link-monitor', 'serial-debug'].includes(activeTool.id) ? `
                   <div class="bento-nd-loading">
                     <div class="bento-nd-spinner"></div>
                     <span>正在执行 ${activeTool.name}...</span>
@@ -3997,7 +3994,8 @@ function renderNetworkPage() {
                     <div class="bento-nd-summary-title">${icon(state.ndOutput.success ? 'check-circle' : 'alert-circle', 14)} 执行摘要</div>
                     <div class="bento-nd-summary-text">${escapeHtml(state.ndOutput.summary)}</div>
                   </div>` : ''}
-                  <pre class="bento-nd-output-pre">${escapeHtml(state.ndOutput.output)}</pre>` : `
+                  <pre class="bento-nd-output-pre">${escapeHtml(state.ndOutput.output)}</pre>
+                  ${activeTool.id === 'serial-debug' ? renderSerialTerminalControls() : ''}` : `
                   <div class="bento-nd-loading" style="padding:60px;">
                     <div style="text-align:center;">
                       ${icon('terminal', 32)}
@@ -4069,7 +4067,7 @@ function getToolIcon(toolId) {
     'tls-scan': 'lock', 'firewall-status': 'shield', 'firewall-manager': 'shield-plus',
     'mitm-hints': 'shield-alert', 'security-check': 'shield-check',
     'temp-http-server': 'server-off', 'ftp-server': 'folder-up',
-    'tftp-server': 'folder-download', 'syslog-server': 'file-text',
+    'tftp-server': 'folder-down', 'syslog-server': 'file-text',
     'netflow-listen': 'arrow-down-left',
     // 系统工具
     'process-list': 'cpu', 'service-status': 'server', 'resource-hotspots': 'thermometer',
@@ -4416,9 +4414,14 @@ function getToolConfig(toolId) {
     'cable-order': { fields: [], canStop: false },
     'serial-debug': {
       fields: [
-        { name: 'COM端口', key: 'port', type: 'input', default: 'COM1', placeholder: '如: COM1' },
-        { name: '波特率', key: 'baud', type: 'select', options: ['9600', '19200', '38400', '57600', '115200'], default: '9600' },
-        { name: '发送数据', key: 'data', type: 'input', default: '', placeholder: 'AT\\r\\n' },
+        { name: 'COM端口', key: 'port', type: 'input', default: serialTerminalRuntime.ports[0]?.port || 'COM1', placeholder: '如 COM3', hint: serialTerminalRuntime.ports.length ? `检测到：${serialTerminalRuntime.ports.map(item => item.port).join('、')}` : '未检测到可用端口时，可手工填写 COM 编号后尝试连接。' },
+        { name: '波特率', key: 'baud', type: 'select', options: ['9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'], default: '9600' },
+        { name: '数据位', key: 'dataBits', type: 'select', options: ['8', '7', '6', '5'], default: '8' },
+        { name: '停止位', key: 'stopBits', type: 'select', options: ['1', '1.5', '2'], default: '1' },
+        { name: '校验位', key: 'parity', type: 'select', options: ['none', 'even', 'odd', 'mark', 'space'], default: 'none' },
+        { name: '显示格式', key: 'displayMode', type: 'select', options: [{ value: 'text', label: '文本 UTF-8' }, { value: 'hex', label: 'HEX' }], default: 'text' },
+        { name: '发送格式', key: 'inputFormat', type: 'select', options: [{ value: 'text', label: '文本' }, { value: 'hex', label: 'HEX' }], default: 'text' },
+        { name: '行结束符', key: 'lineEnding', type: 'select', options: [{ value: 'none', label: '无' }, { value: 'crlf', label: 'CRLF (\\r\\n)' }, { value: 'lf', label: 'LF (\\n)' }, { value: 'cr', label: 'CR (\\r)' }], default: 'crlf' },
       ],
       canStop: true,
     },
@@ -4564,6 +4567,7 @@ function renderNdToolConfig(toolId, config) {
               <label>${field.name}</label>
               <input type="text" value="${value}" placeholder="${field.placeholder}" 
                      oninput="updateNdParam('${field.key}', this.value)" />
+              ${field.hint ? `<span class="bento-nd-config-hint">${field.hint}</span>` : ''}
             </div>`;
         }).join('')}
       </div>
@@ -4597,6 +4601,7 @@ function selectNdTool(toolId) {
     state.activeTool = { id: toolId, name: tool.name, desc: tool.desc };
     state.ndToolParams = {};
     state.ndOutput = null;
+    if (toolId === 'serial-debug') loadSerialPorts();
     render();
   }
 }
@@ -4676,6 +4681,11 @@ function runToolWithParams(toolId, params) {
 
   if (toolId === 'packet-capture') {
     startPacketCapture(params);
+    return;
+  }
+
+  if (toolId === 'serial-debug') {
+    openSerialTerminal(params);
     return;
   }
 
@@ -4808,7 +4818,6 @@ function runToolWithParams(toolId, params) {
     'web-probe': { id: 'web-probe' },
     'onvif-search': { id: 'camera-scan', subnet: '192.168.1.0/24', ports: '80,443,554,8000,8080,37777', timeout: 3 },
     // 串口/Telnet/WiFi
-    'serial-debug': { id: 'service-status' },
     'telnet-client': { id: 'tcp-ping' },
     'wifi-scan': { id: 'network-snapshot' },
     'system-launcher': { id: 'system-launcher', target: 'windows-settings' },
@@ -5350,6 +5359,148 @@ function stopUnifiedLinkMonitor() {
   render();
 }
 
+function serialOutputView(message = '') {
+  const session = serialTerminalRuntime.session;
+  const lines = message ? [message, '='.repeat(56), ...serialTerminalRuntime.lines] : serialTerminalRuntime.lines;
+  return {
+    toolId: 'serial-debug',
+    output: lines.join('\n') || '等待串口会话输出。',
+    summary: session?.status === 'connected'
+      ? `${session.port} 已连接，${session.baud}/${session.dataBits}${session.parity}/${session.stopBits}；可在下方连续发送数据。`
+      : session ? `${session.port} 会话状态：${session.status}` : '未建立串口会话。',
+    success: session?.status !== 'error',
+    stats: session ? [
+      { label: '串口', value: session.port },
+      { label: '参数', value: `${session.baud}/${session.dataBits}${session.parity}/${session.stopBits}` },
+      { label: '状态', value: session.status === 'connected' ? '已连接' : session.status },
+    ] : null,
+  };
+}
+
+async function loadSerialPorts(silent = true) {
+  if (serialTerminalRuntime.loadingPorts) return;
+  serialTerminalRuntime.loadingPorts = true;
+  try {
+    const result = await apiJson('/api/serial/ports');
+    serialTerminalRuntime.ports = Array.isArray(result.ports) ? result.ports : [];
+    if (!silent) showToast(serialTerminalRuntime.ports.length ? `发现 ${serialTerminalRuntime.ports.length} 个串口` : '未发现可用串口');
+    if (state.activeTool?.id === 'serial-debug') render();
+  } catch (error) {
+    if (!silent) showToast(`扫描串口失败：${error.message}`);
+    if (state.activeTool?.id === 'serial-debug') {
+      state.ndOutput = { toolId: 'serial-debug', output: error.message, summary: '无法读取本机串口列表。', success: false };
+      render();
+    }
+  } finally { serialTerminalRuntime.loadingPorts = false; }
+}
+
+function clearSerialTerminalPoller() {
+  if (serialTerminalRuntime.poller) window.clearInterval(serialTerminalRuntime.poller);
+  serialTerminalRuntime.poller = null;
+}
+
+function appendSerialLines(chunks) {
+  for (const chunk of chunks || []) {
+    serialTerminalRuntime.cursor = Math.max(serialTerminalRuntime.cursor, Number(chunk.seq) || 0);
+    serialTerminalRuntime.lines.push(String(chunk.data || '').replace(/\r\n/g, '\n'));
+  }
+  if (serialTerminalRuntime.lines.length > 800) serialTerminalRuntime.lines.splice(0, serialTerminalRuntime.lines.length - 800);
+}
+
+async function pollSerialTerminal() {
+  const session = serialTerminalRuntime.session;
+  if (!session?.id) return clearSerialTerminalPoller();
+  try {
+    const result = await apiJson(`/api/serial/sessions/${encodeURIComponent(session.id)}/output?after=${serialTerminalRuntime.cursor}`);
+    serialTerminalRuntime.session = result.session;
+    appendSerialLines(result.chunks);
+    if (['closed', 'error'].includes(result.session.status)) clearSerialTerminalPoller();
+    if (state.activeTool?.id === 'serial-debug') {
+      state.ndOutput = serialOutputView();
+      render();
+    }
+  } catch (error) {
+    clearSerialTerminalPoller();
+    if (state.activeTool?.id === 'serial-debug') {
+      state.ndOutput = { toolId: 'serial-debug', output: error.message, summary: '串口输出轮询失败。', success: false };
+      render();
+    }
+  }
+}
+
+async function openSerialTerminal(params = {}) {
+  if (serialTerminalRuntime.session?.status === 'connected') {
+    state.isToolRunning = false;
+    state.ndOutput = serialOutputView('当前已存在打开的串口会话，请使用下方发送栏或点击停止关闭。');
+    render();
+    return;
+  }
+  try {
+    const session = await apiJson('/api/serial/sessions', { method: 'POST', body: JSON.stringify(params) });
+    clearSerialTerminalPoller();
+    serialTerminalRuntime.session = session;
+    serialTerminalRuntime.cursor = 0;
+    serialTerminalRuntime.lines = [];
+    await pollSerialTerminal();
+    serialTerminalRuntime.poller = window.setInterval(pollSerialTerminal, 700);
+    state.isToolRunning = false;
+    state.ndOutput = serialOutputView('串口会话已建立');
+    showToast(`${session.port} 已打开`);
+    render();
+  } catch (error) {
+    state.isToolRunning = false;
+    state.ndOutput = { toolId: 'serial-debug', output: error.message, summary: '无法打开串口。请确认 COM 编号、连线、参数和占用状态。', success: false };
+    render();
+  }
+}
+
+async function sendSerialTerminalInput() {
+  const session = serialTerminalRuntime.session;
+  const input = document.getElementById('serial-terminal-input');
+  if (!session?.id || session.status !== 'connected' || !input) return;
+  const value = input.value;
+  if (!value) return;
+  const params = state.ndToolParams || {};
+  try {
+    await apiJson(`/api/serial/sessions/${encodeURIComponent(session.id)}/input`, { method: 'POST', body: JSON.stringify({ data: value, format: params.inputFormat || 'text', lineEnding: params.lineEnding || 'crlf' }) });
+    input.value = '';
+    await pollSerialTerminal();
+  } catch (error) { showToast(`发送失败：${error.message}`); }
+}
+
+async function closeSerialTerminal() {
+  const session = serialTerminalRuntime.session;
+  if (!session?.id) {
+    state.isToolRunning = false;
+    state.ndOutput = { toolId: 'serial-debug', output: '当前没有打开的串口会话。', summary: '未执行关闭操作。', success: true };
+    render();
+    return;
+  }
+  try {
+    const closed = await apiJson(`/api/serial/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE', body: '{}' });
+    serialTerminalRuntime.session = closed;
+    await pollSerialTerminal();
+    clearSerialTerminalPoller();
+    state.isToolRunning = false;
+    state.ndOutput = serialOutputView('串口会话已关闭');
+    showToast(`${closed.port} 已关闭`);
+    render();
+  } catch (error) { showToast(`关闭串口失败：${error.message}`); }
+}
+
+function renderSerialTerminalControls() {
+  const session = serialTerminalRuntime.session;
+  return `
+    <div class="bento-serial-terminal-controls">
+      <div class="bento-serial-terminal-status">${icon(session?.status === 'connected' ? 'plug-zap' : 'plug', 14)} ${escapeHtml(session?.status === 'connected' ? `${session.port} 已连接` : '未连接，配置参数后点击开始执行')}</div>
+      <div class="bento-serial-terminal-send">
+        <input id="serial-terminal-input" type="text" ${session?.status === 'connected' ? '' : 'disabled'} placeholder="输入要发送的数据，按 Enter 发送" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSerialTerminalInput()}" />
+        <button type="button" onclick="sendSerialTerminalInput()" ${session?.status === 'connected' ? '' : 'disabled'} title="发送数据">${icon('send', 15)}</button>
+        <button type="button" onclick="loadSerialPorts(false)" title="重新扫描串口">${icon('refresh-cw', 15)}</button>
+      </div>
+    </div>`;
+}
+
 function clearPacketCapturePoller() {
   if (packetCaptureRuntime.poller) window.clearInterval(packetCaptureRuntime.poller);
   packetCaptureRuntime.poller = null;
@@ -5455,6 +5606,11 @@ function stopNdTool() {
 
   if (activeTool.id === 'packet-capture') {
     stopPacketCapture();
+    return;
+  }
+
+  if (activeTool.id === 'serial-debug') {
+    closeSerialTerminal();
     return;
   }
 
