@@ -1,0 +1,79 @@
+# ============================================================
+# IT 运维百宝箱 - Docker Compose
+# 使用：docker compose up -d
+# 访问：http://127.0.0.1:3000
+# ============================================================
+version: "3.9"
+
+x-common: &common
+  restart: unless-stopped
+  networks:
+    - opsbox-net
+
+services:
+  # ─── 主应用 ───
+  app:
+    <<: *common
+    image: it-ops-toolbox:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      # 持久化数据
+      - opsbox-data:/app/data
+      # 可选：挂载本地 .env
+      - ./.env:/app/.env:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - IT_OPS_TOOLBOX_DATA_DIR=/app/data
+      - MYSQL_HOST=${MYSQL_HOST:-mysql}
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER:-ops_box_user}
+      - MYSQL_PASS=${MYSQL_PASS:-}
+      - MYSQL_DB=${MYSQL_DB:-ops_box}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      # AI Provider 配置（JSON 格式）
+      - OPSHUB_AI_PROVIDERS_JSON=${OPSHUB_AI_PROVIDERS_JSON:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ─── MySQL ───
+  mysql:
+    <<: *common
+    image: mysql:8.0
+    ports:
+      - "3307:3306"   # 映射到 3307 避免与本机冲突
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASS:-root123}
+      - MYSQL_DATABASE=ops_box
+      - MYSQL_USER=${MYSQL_USER:-ops_box_user}
+      - MYSQL_PASSWORD=${MYSQL_PASS:-}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASS:-root123}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  opsbox-data:
+    driver: local
+  mysql-data:
+    driver: local
+
+networks:
+  opsbox-net:
+    driver: bridge

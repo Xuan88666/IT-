@@ -489,6 +489,25 @@ try {
   await check('OCR 非法输入拦截', async () => { await request('/api/ocr/image', { method: 'POST', headers: engineerHeaders(), body: JSON.stringify({ mime: 'application/octet-stream', data: 'AA==' }) }, 400); });
   await check('Agent 非法输入拦截', async () => { await request('/api/agent-reports/import', { method: 'POST', headers: engineerHeaders(), body: JSON.stringify({ site: 'test', report: { format: 'invalid' } }) }, 400); });
 
+  await check('服务器监控 API 可用', async () => {
+    const adminHeaders = () => ({ Cookie: adminCookie, 'Content-Type': 'application/json' });
+    // 1. 上报监控数据（无需登录）
+    const report = await json('/api/server/monitor/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hostname: 'test-server', cpu: { usage_percent: 45 }, memory: { usage_percent: 60, total_mb: 8192, used_mb: 4915 }, disk: { usage_percent: 55, total_gb: 100, used_gb: 55 }, network: [{ iface: 'eth0', rx_bytes: 1000000, tx_bytes: 500000 }] }) });
+    if (!report.ok || !Array.isArray(report.alerts)) throw new Error('监控上报失败');
+    // 2. 查询服务器列表（需登录）
+    const servers = await json('/api/server/monitor/servers', { headers: adminHeaders() });
+    if (!Array.isArray(servers.servers)) throw new Error('监控服务器列表未返回数组');
+    const found = servers.servers.find(s => s.hostname === 'test-server');
+    if (!found) throw new Error('上报后服务器列表未包含 test-server');
+    // 3. 查询单台服务器详情
+    const status = await json('/api/server/monitor/status/test-server', { headers: adminHeaders() });
+    if (!status.ok || !status.latest || status.latest.cpu?.usage_percent !== 45) throw new Error('监控状态查询异常：' + JSON.stringify({found,status}));
+    // 4. 下载 Agent 脚本（无需登录）
+    const agentScript = await request('/api/server/monitor/agent-script', { headers: adminHeaders() });
+    const scriptText = await agentScript.text();
+    if (!scriptText.includes('#!/bin/bash') || !scriptText.includes('cpu')) throw new Error('Linux Agent 脚本内容异常');
+  });
+
   console.log(`\nSmoke test passed: ${checks.length} checks.`);
 } finally {
   server.kill();

@@ -12,6 +12,7 @@ const state = {
   toolHistory: [],
   activeToolRun: null,
   dashboardToolQuery: '',
+  serverMonitor: { servers: [], detail: null },
   aiProviders: [{ name: '本地运维规则助手', mode: 'local' }],
   chatMessages: [],
   externalTools: [],
@@ -6230,15 +6231,241 @@ function renderExternalToolsPage() {
     </div>`;
 }
 
-function renderMonitoringPage() {
+/* ── 服务器监控仪表盘 ── */
+async function fetchServerMonitor() {
+  try {
+    const res = await fetch('/api/server/monitor/servers');
+    const data = await res.json();
+    if (data.ok) state.serverMonitor.servers = data.servers || [];
+  } catch { /* silent */ }
+}
+
+function renderGaugeBar(label, percent, color, detail) {
+  const p = Math.min(100, Math.max(0, Number(percent) || 0));
+  const hue = p > 90 ? '0' : p > 75 ? '30' : color || '150';
   return `
+    <div class="sm-gauge">
+      <div class="sm-gauge-label"><span>${label}</span><span>${detail || p.toFixed(1) + '%'}</span></div>
+      <div class="sm-gauge-track"><div class="sm-gauge-fill" style="width:${p}%;background:hsl(${hue},75%,45%)"></div></div>
+    </div>`;
+}
+
+function renderMiniChart(points, color = 'var(--tk-accent)', height = 40) {
+  if (!points || points.length < 2) return '';
+  const w = 160; const h = height;
+  const max = Math.max(...points, 1);
+  const min = Math.min(...points, 0);
+  const range = max - min || 1;
+  const stepX = w / (points.length - 1);
+  const path = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * stepX).toFixed(1)},${(h - ((v - min) / range) * (h - 4) - 2).toFixed(1)}`).join('');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block"><path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function renderServerCards() {
+  const servers = state.serverMonitor.servers;
+  if (!servers.length) return `
+    <div class="sm-empty">
+      ${icon('server', 48)}<p>暂无已监控的服务器</p>
+      <p class="sm-hint">通过 SSH 连接到 Linux 服务器后，将自动采集监控数据</p>
+      <button class="tk-btn tk-btn-sm" onclick="fetchServerMonitor();render()">刷新</button>
+    </div>`;
+
+  return servers.map(s => {
+    const cpu = s.latest?.cpu?.usage_percent || 0;
+    const mem = s.latest?.memory?.usage_percent || 0;
+    const disk = s.latest?.disk?.usage_percent || 0;
+    const uptime = s.latest?.uptime_days || 0;
+    const historyCPU = (s.latest?.history || []).slice(-60).map(h => h.cpu?.usage_percent || 0).filter(v => v > 0);
+    const statusDot = s.online ? 'status-online' : 'status-offline';
+    return `
+      <div class="sm-card" onclick="showServerDetail('${s.hostname}')">
+        <div class="sm-card-header">
+          <span class="${statusDot}"></span>
+          <span class="sm-card-title">${s.alias || s.hostname}</span>
+          <span class="sm-card-hostname">${s.hostname}</span>
+          <span class="sm-card-badge">${uptime.toFixed(1)}d</span>
+        </div>
+        <div class="sm-card-gauges">
+          ${renderGaugeBar('CPU', cpu, cpu > 90 ? '0' : cpu > 75 ? '30' : '150', cpu.toFixed(1) + '%')}
+          ${renderGaugeBar('内存', mem, mem > 90 ? '0' : mem > 75 ? '30' : '150', mem.toFixed(1) + '%')}
+          ${renderGaugeBar('磁盘', disk, disk > 90 ? '0' : disk > 80 ? '30' : '150', disk.toFixed(1) + '%')}
+        </div>
+        <div class="sm-card-footer">
+          <span>${s.latest?.os || ''}</span>
+          ${historyCPU.length ? renderMiniChart(historyCPU, '#22c55e', 28) : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function showServerDetail(hostname) {
+  fetch(`/api/server/monitor/status/${encodeURIComponent(hostname)}`).then(r => r.json()).then(data => {
+    if (data.ok) { state.serverMonitor.detail = data; render(); }
+  }).catch(() => { showToast('获取服务器详情失败', 'danger'); });
+}
+
+function closeServerDetail() {
+  state.serverMonitor.detail = null;
+  render();
+}
+
+function renderServerDetail() {
+  const d = state.serverMonitor.detail;
+  if (!d) return '';
+  const s = d.latest || {};
+  const history = d.history || [];
+  const cpuVals = history.map(h => h.cpu?.usage_percent || 0).filter(v => v > 0);
+  const memVals = history.map(h => h.memory?.usage_percent || 0).filter(v => v > 0);
+  const diskVals = history.map(h => h.disk?.usage_percent || 0).filter(v => v > 0);
+  const netIfaces = s.network || [];
+
+  const style = `<style>
+    .sm-detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px}
+    .sm-detail-panel{background:var(--tk-bg2);border-radius:12px;width:90%;max-width:800px;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+    .sm-detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .sm-detail-title{font-size:18px;font-weight:600}
+    .sm-detail-close{cursor:pointer;padding:4px 8px;border-radius:6px;background:var(--tk-bg3)}
+    .sm-detail-close:hover{background:var(--tk-accent)}
+    .sm-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+    .sm-detail-card{background:var(--tk-bg3);border-radius:8px;padding:16px}
+    .sm-detail-card h4{margin:0 0 12px;font-size:14px;opacity:.7}
+    .sm-detail-metric{font-size:28px;font-weight:700}
+    .sm-detail-card.network{grid-column:1/-1}
+    .sm-net-table{width:100%;border-collapse:collapse;font-size:13px}
+    .sm-net-table td{padding:6px 8px;border-bottom:1px solid var(--tk-border)}
+    .sm-chart-section{margin-top:20px}
+    .sm-chart-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px}
+    .sm-threshold-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    .sm-threshold-form input{width:70px;padding:4px 8px;border:1px solid var(--tk-border);border-radius:4px;background:var(--tk-bg1);color:inherit;font-size:13px}
+    @media(max-width:600px){.sm-detail-grid{grid-template-columns:1fr}}
+  </style>`;
+
+  return `
+    ${style}
+    <div class="sm-detail-overlay" onclick="if(event.target===this)closeServerDetail()">
+      <div class="sm-detail-panel">
+        <div class="sm-detail-header">
+          <span class="sm-detail-title">${icon('server', 20)} ${d.alias || d.hostname}</span>
+          <span class="sm-detail-close" onclick="closeServerDetail()">${icon('x', 18)}</span>
+        </div>
+        <div class="sm-detail-grid">
+          <div class="sm-detail-card">
+            <h4>CPU</h4>
+            <div class="sm-detail-metric" style="color:${(s.cpu?.usage_percent||0)>90?'#ef4444':(s.cpu?.usage_percent||0)>75?'#f59e0b':'#22c55e'}">${(s.cpu?.usage_percent||0).toFixed(1)}%</div>
+            <div style="font-size:12px;opacity:.6;margin-top:4px">负载: ${(s.cpu?.load_1m||0).toFixed(2)} / ${(s.cpu?.load_5m||0).toFixed(2)} / ${(s.cpu?.load_15m||0).toFixed(2)} | 进程: ${s.cpu?.processes||0}</div>
+          </div>
+          <div class="sm-detail-card">
+            <h4>内存</h4>
+            <div class="sm-detail-metric" style="color:${(s.memory?.usage_percent||0)>90?'#ef4444':(s.memory?.usage_percent||0)>75?'#f59e0b':'#22c55e'}">${(s.memory?.usage_percent||0).toFixed(1)}%</div>
+            <div style="font-size:12px;opacity:.6;margin-top:4px">${((s.memory?.used_mb||0)/1024).toFixed(1)}G / ${((s.memory?.total_mb||0)/1024).toFixed(1)}G | Swap: ${(s.memory?.swap_percent||0).toFixed(1)}%</div>
+          </div>
+          <div class="sm-detail-card">
+            <h4>磁盘</h4>
+            <div class="sm-detail-metric" style="color:${(s.disk?.usage_percent||0)>90?'#ef4444':(s.disk?.usage_percent||0)>80?'#f59e0b':'#22c55e'}">${(s.disk?.usage_percent||0).toFixed(1)}%</div>
+            <div style="font-size:12px;opacity:.6;margin-top:4px">${(s.disk?.used_gb||0).toFixed(1)}G / ${(s.disk?.total_gb||0).toFixed(1)}G</div>
+          </div>
+          <div class="sm-detail-card">
+            <h4>运行时间</h4>
+            <div class="sm-detail-metric">${(s.uptime_days||0).toFixed(1)}</div>
+            <div style="font-size:12px;opacity:.6;margin-top:4px">${s.os||''} | ${s.kernel||''}</div>
+          </div>
+        </div>
+        ${netIfaces.length ? `
+        <div class="sm-detail-card network">
+          <h4>网卡流量</h4>
+          <table class="sm-net-table">
+            <tr><th>网卡</th><th>接收 (RX)</th><th>发送 (TX)</th></tr>
+            ${netIfaces.map(n => {
+              const rx = n.rx_bytes ? (n.rx_bytes / 1073741824).toFixed(2) + ' GB' : (n.rx_bytes ? (n.rx_bytes / 1048576).toFixed(1) + ' MB' : '0 B');
+              const tx = n.tx_bytes ? (n.tx_bytes / 1073741824).toFixed(2) + ' GB' : (n.tx_bytes ? (n.tx_bytes / 1048576).toFixed(1) + ' MB' : '0 B');
+              return `<tr><td><strong>${n.iface}</strong></td><td>${rx}</td><td>${tx}</td></tr>`;
+            }).join('')}
+          </table>
+        </div>` : ''}
+        <div class="sm-chart-section">
+          <h4>历史趋势（最近 ${history.length} 个采样点）</h4>
+          <div class="sm-chart-row">
+            ${cpuVals.length ? renderGaugeBar('CPU', cpuVals[cpuVals.length-1], '', '') + '<br>' + renderMiniChart(cpuVals, '#22c55e', 50) : ''}
+            ${memVals.length ? renderGaugeBar('内存', memVals[memVals.length-1], '', '') + '<br>' + renderMiniChart(memVals, '#3b82f6', 50) : ''}
+            ${diskVals.length ? renderGaugeBar('磁盘', diskVals[diskVals.length-1], '', '') + '<br>' + renderMiniChart(diskVals, '#f59e0b', 50) : ''}
+          </div>
+        </div>
+        <div class="sm-chart-section" style="margin-top:16px">
+          <h4>阈值告警配置</h4>
+          <div class="sm-threshold-form">
+            <label>CPU ></label><input id="th-cpu" type="number" value="${d.thresholds?.cpu_max||90}" min="0" max="100">
+            <label>内存 ></label><input id="th-mem" type="number" value="${d.thresholds?.memory_max||90}" min="0" max="100">
+            <label>磁盘 ></label><input id="th-disk" type="number" value="${d.thresholds?.disk_max||85}" min="0" max="100">
+            <button class="tk-btn tk-btn-sm" onclick="saveThreshold('${d.hostname}')">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function saveThreshold(hostname) {
+  const thresholds = {
+    cpu_max: Number(document.getElementById('th-cpu')?.value) || 90,
+    memory_max: Number(document.getElementById('th-mem')?.value) || 90,
+    disk_max: Number(document.getElementById('th-disk')?.value) || 85,
+  };
+  fetch('/api/server/monitor/threshold', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hostname, thresholds })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) { showToast('阈值保存成功', 'success'); closeServerDetail(); }
+  }).catch(() => showToast('保存失败', 'danger'));
+}
+
+function renderMonitoringPage() {
+  if (!state.serverMonitor.servers.length) fetchServerMonitor().then(() => render());
+  const detailModal = state.serverMonitor.detail ? renderServerDetail() : '';
+
+  const monStyle = `<style>
+    .sm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:24px}
+    .sm-card{background:var(--tk-bg2);border-radius:10px;padding:16px;cursor:pointer;transition:transform .15s,box-shadow .15s;border:1px solid var(--tk-border)}
+    .sm-card:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,.2)}
+    .sm-card-header{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+    .sm-card-title{font-weight:600;font-size:15px}
+    .sm-card-hostname{font-size:12px;opacity:.5;margin-left:4px}
+    .sm-card-badge{margin-left:auto;font-size:11px;padding:2px 8px;border-radius:10px;background:var(--tk-bg3)}
+    .sm-card-gauges{display:flex;flex-direction:column;gap:6px}
+    .sm-gauge{display:flex;flex-direction:column;gap:2px}
+    .sm-gauge-label{display:flex;justify-content:space-between;font-size:12px;opacity:.7}
+    .sm-gauge-track{height:6px;background:var(--tk-bg3);border-radius:3px;overflow:hidden}
+    .sm-gauge-fill{height:100%;border-radius:3px;transition:width .5s}
+    .sm-card-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:11px;opacity:.5}
+    .sm-empty{text-align:center;padding:60px 20px;opacity:.6}
+    .sm-empty p{margin:8px 0}
+    .sm-hint{font-size:13px}
+    .status-online{display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.5)}
+    .status-offline{display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b7280}
+    .sm-refresh{display:flex;gap:8px;margin:0 0 12px}
+  </style>`;
+
+  return `
+    ${monStyle}
     <div class="bento-main">
       <div class="bento-page-header">
-        <h2>监控告警</h2>
-        <p>实时监控和告警管理</p>
+        <h2>监控与告警</h2>
+        <p>服务器资源监控 + 告警管理</p>
+      </div>
+      <div class="sm-refresh">
+        <button class="tk-btn tk-btn-sm" onclick="fetchServerMonitor().then(()=>render())">${icon('refresh-cw', 14)} 刷新</button>
+        <span style="font-size:12px;opacity:.5;align-self:center">共监控 ${state.serverMonitor.servers.length} 台服务器</span>
+      </div>
+      <div class="sm-grid">
+        ${renderServerCards()}
+      </div>
+      <div class="bento-page-header" style="margin-top:8px">
+        <h3>${icon('bell', 16)} 告警记录</h3>
       </div>
       <div class="bento-alert-grid">
-        ${monitoringAlerts.map(alert => `
+        ${monitoringAlerts.map(alert => {
+          const maxVal = parseInt(alert.value) || 0;
+          const maxThresh = parseInt(alert.threshold) || 100;
+          return `
           <div class="bento-alert-card ${alert.status}">
             <div class="bento-alert-header">
               <span class="bento-alert-icon">${icon(alert.status === 'critical' ? 'alert-circle' : alert.status === 'warning' ? 'alert-triangle' : 'check-circle', 18)}</span>
@@ -6250,11 +6477,13 @@ function renderMonitoringPage() {
               <span class="bento-alert-threshold">阈值: ${alert.threshold}</span>
             </div>
             <div class="bento-alert-progress">
-              <div class="bento-alert-progress-bar" style="width: ${Math.min(100, parseInt(alert.value) / parseInt(alert.threshold) * 100)}%"></div>
+              <div class="bento-alert-progress-bar" style="width: ${Math.min(100, maxVal / maxThresh * 100)}%"></div>
             </div>
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>
-    </div>`;
+    </div>
+    ${detailModal}`;
 }
 
 function renderSOPPage() {

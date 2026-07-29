@@ -58,6 +58,39 @@ npm.cmd run package:portable
 - 静态资源默认拒绝敏感路径：`.env`、`data/`、后端源码、隐藏文件均不可通过 HTTP 下载；仅放行前端资源和门店 Agent 脚本。
 - 静态资源启用 gzip 压缩与 ETag 协商缓存，页面加载体积约减少 75%。
 
+## Docker 部署
+
+```bash
+# 构建并启动（首次）
+docker compose up -d
+
+# 查看日志
+docker compose logs -f app
+
+# 停止
+docker compose down
+
+# 更新后重新构建
+docker compose build --no-cache app && docker compose up -d
+```
+
+数据持久化在 Docker 卷 `opsbox-data` 和 `mysql-data`，重启不丢失。MySQL 暴露在宿主机 `3307` 端口避免与本机冲突。
+
+## 服务器监控
+
+监控页面在"监控与告警"下。通过 SSH 将 Linux 服务器纳入监控：
+
+```bash
+# 在 Linux 服务器上直接运行采集脚本
+ssh root@your-server "bash -s" < agent/linux-monitor.sh
+
+# 或将脚本部署到服务器，定时上报（crontab 每 5 分钟）
+*/5 * * * * curl -s -X POST http://your-opsbox:3000/api/server/monitor/report \
+  -H 'Content-Type: application/json' -d "$(bash /path/to/linux-monitor.sh)"
+```
+
+监控页面自动展示：CPU/内存/磁盘使用率仪表盘、历史趋势图（24h）、网卡流量、运行时间、OS 版本。支持自定义阈值告警（CPU > 90%、内存 > 90%、磁盘 > 85%）。
+
 ## 可选外部工具
 
 系统自检会显示本机是否安装 Wireshark、Nmap、HWiNFO、CrystalDiskInfo、海康 SADP、RustDesk、AnyDesk 和 Net-SNMP。缺少这些工具不会影响核心功能，只会禁用对应入口。

@@ -83,6 +83,101 @@ const sessionManager = new SessionManager(aiSessionsDir);
 const providers = loadProvidersFromEnv();
 const modelDispatcher = new ModelDispatcher(providers);
 
+// ── 服务器监控系统 ──
+// 通过 SSH 远程执行 agent/linux-monitor.sh 采集，或直接 HTTP 上报
+const monitorStore = {
+  servers: new Map(),     // hostname -> { latest, history[], thresholds, config }
+  storePath: join(dataDir, 'server-monitor.json'),
+  loaded: false,
+  historyMax: 1440,       // 保留 24h（每 1 分钟一个采样点）
+  async load() {
+    try {
+      const raw = await readFile(this.storePath, 'utf-8');
+      const data = JSON.parse(raw);
+      for (const [hostname, info] of Object.entries(data.servers || {})) {
+        this.servers.set(hostname, info);
+      }
+      this.loaded = true;
+    } catch { this.loaded = true; }
+  },
+  async save() {
+    const obj = {};
+    for (const [hostname, info] of this.servers) {
+      obj[hostname] = {
+        config: info.config,
+        thresholds: info.thresholds,
+        latest: info.latest,
+        history: (info.history || []).slice(-this.historyMax),
+        lastReportAt: info.lastReportAt,
+      };
+    }
+    await writeFile(this.storePath, JSON.stringify({ servers: obj }, null, 2), 'utf-8').catch(() => {});
+  },
+  report(hostname, data) {
+    let entry = this.servers.get(hostname);
+    if (!entry) {
+      entry = { config: { alias: hostname, tags: [] }, thresholds: {}, latest: null, history: [], lastReportAt: null };
+      this.servers.set(hostname, entry);
+    }
+    const snapshot = {
+      timestamp: data.timestamp || new Date().toISOString(),
+      cpu: data.cpu || {},
+      memory: data.memory || {},
+      disk: data.disk || {},
+      network: data.network || [],
+      os: data.os || '',
+      kernel: data.kernel || '',
+      uptime_days: data.uptime_days || 0,
+    };
+    entry.latest = snapshot;
+    entry.lastReportAt = snapshot.timestamp;
+    if (!entry.history) entry.history = [];
+    entry.history.push(snapshot);
+    if (entry.history.length > this.historyMax) entry.history.splice(0, entry.history.length - this.historyMax);
+    // 阈值检测
+    const alerts = this._checkThresholds(hostname, snapshot);
+    this.save();
+    return { ok: true, alerts };
+  },
+  _checkThresholds(hostname, snapshot) {
+    const t = this.servers.get(hostname)?.thresholds || {};
+    const alerts = [];
+    if (t.cpu_max && (snapshot.cpu?.usage_percent || 0) > t.cpu_max) alerts.push({ level: 'warning', metric: 'CPU', value: snapshot.cpu.usage_percent, threshold: t.cpu_max });
+    if (t.memory_max && (snapshot.memory?.usage_percent || 0) > t.memory_max) alerts.push({ level: 'warning', metric: '内存', value: snapshot.memory.usage_percent, threshold: t.memory_max });
+    if (t.disk_max && (snapshot.disk?.usage_percent || 0) > t.disk_max) alerts.push({ level: 'warning', metric: '磁盘', value: snapshot.disk.usage_percent, threshold: t.disk_max });
+    return alerts;
+  },
+  setThreshold(hostname, thresholds) {
+    let entry = this.servers.get(hostname);
+    if (!entry) { entry = { config: { alias: hostname, tags: [] }, thresholds: {}, latest: null, history: [], lastReportAt: null }; this.servers.set(hostname, entry); }
+    entry.thresholds = { ...entry.thresholds, ...thresholds };
+    this.save();
+  },
+  listServers() {
+    return Array.from(this.servers.entries()).map(([hostname, entry]) => ({
+      hostname,
+      alias: entry.config?.alias || hostname,
+      tags: entry.config?.tags || [],
+      online: entry.lastReportAt ? (Date.now() - new Date(entry.lastReportAt).getTime() < 180000) : false,
+      latest: entry.latest,
+      lastReportAt: entry.lastReportAt,
+      thresholds: entry.thresholds || {},
+    }));
+  },
+  getServer(hostname) {
+    const entry = this.servers.get(hostname);
+    if (!entry) return null;
+    return {
+      hostname,
+      alias: entry.config?.alias || hostname,
+      latest: entry.latest,
+      history: (entry.history || []).slice(-120), // 最近 2 小时
+      thresholds: entry.thresholds || {},
+    };
+  },
+};
+monitorStore.load();
+
 // Agent 工具调用速率限制与统计
 const agentToolStats = {
   totalCalls: 0,
@@ -622,6 +717,10 @@ function requiredPermission(pathname, method) {
     return null;
   }
   if (pathname === '/api/ocr/image' || pathname === '/api/evidence' && method === 'POST' || pathname === '/api/agent-reports/import') return 'data_write';
+  // 服务器监控上报不需要登录（由远程 Linux 服务器 agent 直接 POST）
+  if (pathname === '/api/server/monitor/report') return null;
+  if (pathname === '/api/server/monitor/agent-script') return null;
+  if (pathname.startsWith('/api/server/monitor/')) return method === 'GET' ? 'data_read' : 'data_write';
   if (method !== 'GET') return 'data_write';
   return 'data_read';
 }
@@ -2589,6 +2688,34 @@ async function handleApi(req, res, pathname) {
   // 连接测试
   if (pathname === '/api/tools/connection-test') {
     return send(res, 200, await connectionTest({ host: body.host, port: body.port, protocol: body.protocol, timeout: body.timeout }));
+  }
+
+  // 跳转前先检查监控路由（避免被下方的 host 校验误拦截）
+  if (pathname === '/api/server/monitor/report' && req.method === 'POST') {
+    const hostname = String(body.hostname || '').trim();
+    if (!hostname || !body) return send(res, 400, { ok: false, output: '缺少 hostname 或监控数据' });
+    const result = monitorStore.report(hostname, body);
+    return send(res, result.alerts.length ? 200 : 200, result);
+  }
+  if (pathname === '/api/server/monitor/servers') {
+    return send(res, 200, { ok: true, servers: monitorStore.listServers() });
+  }
+  if (pathname.startsWith('/api/server/monitor/status/')) {
+    const hostname = decodeURIComponent(pathname.slice(27));
+    const server = monitorStore.getServer(hostname);
+    return send(res, 200, { ok: true, ...server });
+  }
+  if (pathname === '/api/server/monitor/threshold' && req.method === 'POST') {
+    const hostname = String(body.hostname || '').trim();
+    if (!hostname) return send(res, 400, { ok: false, output: '缺少 hostname' });
+    monitorStore.setThreshold(hostname, body.thresholds || {});
+    return send(res, 200, { ok: true });
+  }
+  if (pathname === '/api/server/monitor/agent-script') {
+    try {
+      const script = await readFile(join(root, 'agent', 'linux-monitor.sh'), 'utf-8');
+      return send(res, 200, script, 'text/plain; charset=utf-8');
+    } catch { return send(res, 404, { ok: false, output: 'Agent 脚本未找到' }); }
   }
 
   const host = body.host?.trim();
