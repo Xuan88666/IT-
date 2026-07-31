@@ -24,4 +24,9 @@ store.recordLoginFailure('203.0.113.30', start);
 store.clearLoginFailures('203.0.113.30');
 if (!store.allowLogin('203.0.113.30', start + 1)) throw new Error('成功登录应清除失败记录。');
 
+for (let index = 0; index < 10_001; index += 1) store.allowEmail(`user-${index}@example.com`, start + index);
+if (store.allowEmail('new-user@example.com', start + 10_002)) throw new Error('限流记录达到容量上限时应拒绝新的键。');
+store.prune(start + 60_000 + 10_002);
+if (!store.allowEmail('new-user@example.com', start + 60_000 + 10_003)) throw new Error('过期限流记录应被清理。');
+
 console.log('Rate limit test passed.');

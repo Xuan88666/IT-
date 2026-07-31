@@ -32,9 +32,9 @@ services:
       - MYSQL_HOST=${MYSQL_HOST:-mysql}
       - MYSQL_PORT=3306
       - MYSQL_USER=${MYSQL_USER:-ops_box_user}
-      - MYSQL_PASS=${MYSQL_PASS:-}
+      - MYSQL_PASS=${MYSQL_PASS:?MYSQL_PASS must be set to a strong password}
       - MYSQL_DB=${MYSQL_DB:-ops_box}
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set to a random value of at least 32 characters}
       # AI Provider 配置（JSON 格式）
       - OPSHUB_AI_PROVIDERS_JSON=${OPSHUB_AI_PROVIDERS_JSON:-}
     depends_on:
@@ -46,27 +46,62 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - NET_RAW
+    read_only: false
 
   # ─── MySQL ───
   mysql:
     <<: *common
     image: mysql:8.0
-    ports:
-      - "3307:3306"   # 映射到 3307 避免与本机冲突
     volumes:
       - mysql-data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASS:-root123}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASS:?MYSQL_ROOT_PASS must be set to a strong password}
       - MYSQL_DATABASE=ops_box
       - MYSQL_USER=${MYSQL_USER:-ops_box_user}
-      - MYSQL_PASSWORD=${MYSQL_PASS:-}
+      - MYSQL_PASSWORD=${MYSQL_PASS:?MYSQL_PASS must be set to a strong password}
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASS:-root123}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASS}"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 30s
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
 
 volumes:
   opsbox-data:

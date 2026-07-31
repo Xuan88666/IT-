@@ -17,11 +17,14 @@ CREATE TABLE IF NOT EXISTS `user` (
 CREATE TABLE IF NOT EXISTS `email_code` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '验证码主键',
   `email` VARCHAR(120) NOT NULL COMMENT '接收验证码的邮箱',
-  `code` CHAR(6) NOT NULL COMMENT '6 位数字验证码',
+  `purpose` VARCHAR(32) NOT NULL DEFAULT 'register' COMMENT '验证码用途',
+  `code` CHAR(6) NOT NULL DEFAULT '******' COMMENT '已废弃，保留以兼容旧表',
+  `code_hash` CHAR(64) DEFAULT NULL COMMENT 'HMAC-SHA256 验证码摘要',
   `expire_time` DATETIME NOT NULL COMMENT '验证码过期时间',
   `create_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
-  KEY `idx_email_code_email` (`email`)
+  KEY `idx_email_code_email` (`email`),
+  KEY `idx_email_code_lookup` (`email`, `purpose`, `expire_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='邮箱验证码表';
 
 CREATE TABLE IF NOT EXISTS `announcement` (

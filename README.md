@@ -36,6 +36,8 @@
 ### Docker 部署（推荐）
 
 ```bash
+cp .env.example .env
+# Set JWT_SECRET, MYSQL_PASS, and MYSQL_ROOT_PASS to strong, unique values in .env.
 docker compose up -d
 # 打开 http://localhost:3000
 ```

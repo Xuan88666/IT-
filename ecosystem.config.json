@@ -1,0 +1,22 @@
+{
+  "apps": [{
+    "name": "it-ops-toolbox",
+    "script": "server.js",
+    "cwd": "/www/wwwroot/it-ops-toolbox",
+    "instances": 1,
+    "exec_mode": "cluster",
+    "watch": false,
+    "max_memory_restart": "1G",
+    "env": {
+      "NODE_ENV": "production",
+      "PORT": 3000
+    },
+    "error_file": "/www/wwwroot/it-ops-toolbox/logs/error.log",
+    "out_file": "/www/wwwroot/it-ops-toolbox/logs/out.log",
+    "log_date_format": "YYYY-MM-DD HH:mm:ss",
+    "merge_logs": true,
+    "autorestart": true,
+    "min_uptime": "10s",
+    "max_restarts": 10
+  }]
+}

@@ -20,3 +20,40 @@ server-console.log
 *.log
 cookies.txt
 chi_sim.traineddata
+
+# IDE 和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# 系统文件
+*.bak
+*.tmp
+.cache/
+
+# PM2
+.pm2/
+pm2.log
+ecosystem.config.js
+
+# 构建产物
+*.tgz
+*.zip
+
+# 调试
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# Claude AI
+.claude/

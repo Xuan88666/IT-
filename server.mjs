@@ -10,7 +10,7 @@ import { basename, extname, join, normalize, sep } from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import net from 'node:net';
 import dgram from 'node:dgram';
-import { randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -51,6 +51,7 @@ let ocrWorkerPromise = null;
 let ocrQueue = Promise.resolve();
 let storeWriteQueue = Promise.resolve();
 let storeWriteCounter = 0;
+let emailCodeSchemaPromise = null;
 
 const mysqlPool = mysql.createPool({
   host: process.env.MYSQL_HOST || '127.0.0.1',
@@ -424,6 +425,7 @@ const roleProfiles = {
 };
 const sessionStore = new Map();
 const verificationCodeStore = new Map();
+const MAX_VERIFICATION_CODES = 10_000;
 const rolePermissions = (role) => roleProfiles[role]?.permissions || roleProfiles.user.permissions;
 const safeUser = (user) => user ? ({ id: user.id, username: user.username, email: user.email || '', displayName: user.displayName || user.username, role: user.role, roleLabel: roleProfiles[user.role]?.label || user.role, disabled: Boolean(user.disabled), createdAt: user.createdAt, updatedAt: user.updatedAt }) : null;
 const manageableRoles = (role) => {
@@ -478,13 +480,21 @@ function createSession(res, user) {
 function generateVerificationCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
+function purgeVerificationCodes(now = Date.now()) {
+  for (const [key, record] of verificationCodeStore) {
+    if (record.expiresAt <= now) verificationCodeStore.delete(key);
+  }
+}
 function storeVerificationCode(target, purpose) {
+  purgeVerificationCodes();
   const code = generateVerificationCode();
   const key = `${purpose}:${target.toLowerCase()}`;
+  if (!verificationCodeStore.has(key) && verificationCodeStore.size >= MAX_VERIFICATION_CODES) throw new Error('验证码请求过多，请稍后再试');
   verificationCodeStore.set(key, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
   return code;
 }
 function verifyCode(target, purpose, code) {
+  purgeVerificationCodes();
   const key = `${purpose}:${target.toLowerCase()}`;
   const record = verificationCodeStore.get(key);
   if (!record) return false;
@@ -511,6 +521,41 @@ function isValidEmail(email) {
 function isQqEmail(email) {
   return /^\d{5,12}@qq\.com$/i.test(email);
 }
+const databaseRoleHierarchy = Object.freeze({ super: 5, manager: 4, admin: 3, distributor: 2, user: 1 });
+const verificationPurposes = new Set(['register', 'forgot']);
+function normalizeVerificationPurpose(value) {
+  const purpose = String(value || 'register').trim();
+  return verificationPurposes.has(purpose) ? purpose : null;
+}
+function canManageDatabaseRole(actorRole, targetRole) {
+  return Number.isInteger(databaseRoleHierarchy[actorRole])
+    && Number.isInteger(databaseRoleHierarchy[targetRole])
+    && databaseRoleHierarchy[actorRole] > databaseRoleHierarchy[targetRole];
+}
+function validDatabasePassword(value) {
+  return typeof value === 'string' && value.length >= 8 && value.length <= 200;
+}
+function verificationCodeHash(email, purpose, code) {
+  const secret = jwtSecret();
+  if (!secret) throw new Error('JWT_SECRET is required to verify email codes');
+  return createHmac('sha256', secret).update(`${purpose}\u0000${email}\u0000${code}`).digest('hex');
+}
+async function ensureEmailCodeSchema() {
+  if (emailCodeSchemaPromise) return emailCodeSchemaPromise;
+  const migration = (async () => {
+    const [columns] = await mysqlPool.query('SHOW COLUMNS FROM email_code');
+    const names = new Set(columns.map((column) => column.Field));
+    if (!names.has('purpose')) await mysqlPool.query("ALTER TABLE email_code ADD COLUMN purpose VARCHAR(32) NOT NULL DEFAULT 'register' AFTER email");
+    if (!names.has('code_hash')) await mysqlPool.query('ALTER TABLE email_code ADD COLUMN code_hash CHAR(64) NULL AFTER code');
+  })();
+  emailCodeSchemaPromise = migration;
+  try {
+    return await migration;
+  } catch (error) {
+    emailCodeSchemaPromise = null;
+    throw error;
+  }
+}
 function clientIp(req) {
   return String(req.ip || req.socket?.remoteAddress || 'unknown').replace(/^::ffff:/, '');
 }
@@ -524,8 +569,8 @@ async function authMiddleware(req, res, next) {
     const payload = jwt.verify(token, jwtSecret());
     const userId = Number(payload.userId);
     if (!Number.isInteger(userId) || userId < 1) return apiError(res, '登录凭证无效', 401);
-    const [rows] = await mysqlPool.execute('SELECT id, email, nickname, role FROM `user` WHERE id = ? LIMIT 1', [userId]);
-    if (!rows.length) return apiError(res, '用户不存在或已失效', 401);
+    const [rows] = await mysqlPool.execute('SELECT id, email, nickname, role, COALESCE(disabled, 0) AS disabled FROM `user` WHERE id = ? LIMIT 1', [userId]);
+    if (!rows.length || rows[0].disabled) return apiError(res, '用户不存在、已禁用或已失效', 401);
     req.user = { userId: rows[0].id, email: rows[0].email, nickname: rows[0].nickname, role: rows[0].role };
     return next();
   } catch {
@@ -548,8 +593,8 @@ async function authContext(req) {
       const payload = jwt.verify(headerToken, jwtSecret());
       const userId = Number(payload.userId);
       if (Number.isInteger(userId) && userId > 0) {
-        const [rows] = await mysqlPool.execute('SELECT id, email, nickname, role, create_at FROM `user` WHERE id = ? LIMIT 1', [userId]);
-        if (rows.length) {
+        const [rows] = await mysqlPool.execute('SELECT id, email, nickname, role, create_at, COALESCE(disabled, 0) AS disabled FROM `user` WHERE id = ? LIMIT 1', [userId]);
+        if (rows.length && !rows[0].disabled) {
           const dbUser = rows[0];
           return {
             token: headerToken,
@@ -1703,8 +1748,14 @@ async function handleApi(req, res, pathname) {
   if (pathname === '/api/auth/login' && req.method === 'POST') {
     const store = await readStore();
     if (!store.users.length) return send(res, 409, { ok: false, output: '尚未初始化管理员账号。' });
+    const ip = clientIp(req);
+    if (!rateLimitStore.allowLogin(ip)) return send(res, 429, { ok: false, output: '请求过于频繁，请稍后再试。' });
     const username = String(body.username || body.email || '').trim().toLowerCase(); const user = store.users.find((item) => (item.username === username || (item.email && item.email.toLowerCase() === username)) && !item.disabled);
-    if (!user || !verifyPassword(body.password, user.passwordHash)) return send(res, 401, { ok: false, output: '账号或密码错误。' });
+    if (!user || !verifyPassword(body.password, user.passwordHash)) {
+      if (rateLimitStore.recordLoginFailure(ip)) return send(res, 429, { ok: false, output: '请求过于频繁，请稍后再试。' });
+      return send(res, 401, { ok: false, output: '账号或密码错误。' });
+    }
+    rateLimitStore.clearLoginFailures(ip);
     user.lastLoginAt = new Date().toISOString(); await writeStore(store); const loginToken = createSession(res, user); return send(res, 200, authPayload(user, false, loginToken));
   }
   if (pathname === '/api/auth/logout' && req.method === 'POST') { if (auth.token) sessionStore.delete(auth.token); clearSessionCookie(res); return send(res, 200, { ok: true, output: '已退出登录。' }); }
@@ -2743,10 +2794,17 @@ async function handleApi(req, res, pathname) {
 }
 const app = express();
 const authJson = express.json({ limit: '1mb' });
+const corsOrigins = new Set(String(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()).filter(Boolean));
 
 app.set('trust proxy', 'loopback');
 app.disable('x-powered-by');
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || corsOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS policy'));
+  },
+  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+}));
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
@@ -2756,20 +2814,27 @@ app.use((_req, res, next) => {
 
 app.post('/api/email/sendCode', authJson, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
+  const purpose = normalizeVerificationPurpose(req.body?.purpose);
   if (!isQqEmail(email)) return apiError(res, '仅支持 QQ 邮箱，请填写例如 123456@qq.com', 400);
+  if (!purpose) return apiError(res, '验证码用途无效', 400);
+  if (!jwtSecret()) return apiError(res, 'JWT_SECRET 未配置，无法安全发送验证码', 503);
   if (!rateLimitStore.allowCode(email, clientIp(req))) return apiError(res, '请求过于频繁，请稍后再试', 429);
   const code = String(randomInt(100000, 1000000));
+  let codeHash = '';
   try {
-    await mysqlPool.execute('DELETE FROM email_code WHERE email = ?', [email]);
-    await mysqlPool.execute('INSERT INTO email_code (email, code, expire_time) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))', [email, code]);
+    await ensureEmailCodeSchema();
+    codeHash = verificationCodeHash(email, purpose, code);
+    await mysqlPool.execute('DELETE FROM email_code WHERE email = ? AND purpose = ?', [email, purpose]);
+    await mysqlPool.execute('INSERT INTO email_code (email, purpose, code, code_hash, expire_time) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))', [email, purpose, '******', codeHash]);
     await mailTransporter.sendMail({
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: email,
-      subject: '【运维百宝箱】注册验证码',
+      subject: `【运维百宝箱】${purpose === 'forgot' ? '找回密码' : '注册'}验证码`,
       html: `<p>您的注册验证码为：<strong style="font-size:24px;letter-spacing:4px">${code}</strong></p><p>验证码 5 分钟内有效，请勿泄露给他人。</p>`,
     });
     return apiSuccess(res, {}, '验证码已发送，请查收邮箱');
   } catch (error) {
+    if (codeHash) await mysqlPool.execute('DELETE FROM email_code WHERE email = ? AND purpose = ? AND code_hash = ?', [email, purpose, codeHash]).catch(() => {});
     console.error('[email/sendCode]', error.message);
     return apiError(res, '验证码发送失败，请检查邮件和数据库配置', 500);
   }
@@ -2782,12 +2847,15 @@ app.post('/api/user/register', authJson, async (req, res) => {
   const nickname = String(req.body?.nickname || '').trim().slice(0, 64);
   const phone = String(req.body?.phone || '').trim().slice(0, 32);
   if (!isQqEmail(email) || !/^\d{6}$/.test(code)) return apiError(res, '仅支持 QQ 邮箱，且验证码必须为 6 位数字', 400);
-  if (password.length < 8 || password.length > 200) return apiError(res, '密码长度必须为 8-200 位', 400);
+  if (!validDatabasePassword(password)) return apiError(res, '密码长度必须为 8-200 位', 400);
+  if (!jwtSecret()) return apiError(res, 'JWT_SECRET 未配置，无法安全验证验证码', 503);
   let connection;
   try {
+    await ensureEmailCodeSchema();
+    const codeHash = verificationCodeHash(email, 'register', code);
     connection = await mysqlPool.getConnection();
     await connection.beginTransaction();
-    const [codes] = await connection.execute('SELECT id FROM email_code WHERE email = ? AND code = ? AND expire_time > NOW() ORDER BY id DESC LIMIT 1 FOR UPDATE', [email, code]);
+    const [codes] = await connection.execute("SELECT id FROM email_code WHERE email = ? AND purpose = 'register' AND code_hash = ? AND expire_time > NOW() ORDER BY id DESC LIMIT 1 FOR UPDATE", [email, codeHash]);
     if (!codes.length) { await connection.rollback(); return apiError(res, '验证码错误或已过期', 400); }
     const [users] = await connection.execute('SELECT id FROM `user` WHERE email = ? LIMIT 1 FOR UPDATE', [email]);
     if (users.length) { await connection.rollback(); return apiError(res, '该邮箱已注册', 409); }
@@ -2916,29 +2984,23 @@ app.get('/api/user/list', authMiddleware, adminMiddleware, async (req, res) => {
 });
 
 // 账号管理 - 新增账号（super/manager/admin可访问）
-app.post('/api/user/create', authMiddleware, adminMiddleware, async (req, res) => {
+app.post('/api/user/create', authJson, authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { email, password, nickname, phone, role } = req.body;
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    const nickname = String(req.body?.nickname || '').trim();
+    const phone = String(req.body?.phone || '').trim();
+    const role = String(req.body?.role || '').trim();
     const currentRole = req.user.role;
-
-    // 角色权限校验
-    const roleHierarchy = { super: 5, manager: 4, admin: 3, distributor: 2, user: 1 };
-    if (roleHierarchy[role] > roleHierarchy[currentRole]) {
-      return res.status(403).json({ code: -1, msg: '不能创建比自己角色更高的账号', data: {} });
-    }
-    // 只有 super 可以创建 manager
-    if (role === 'manager' && currentRole !== 'super') {
-      return res.status(403).json({ code: -1, msg: '只有超级管理员可以创建店长账号', data: {} });
-    }
-    // 不能创建 super
-    if (role === 'super') {
-      return res.status(403).json({ code: -1, msg: '不能创建超级管理员账号', data: {} });
-    }
 
     const validRoles = ['manager', 'admin', 'distributor', 'user'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ code: -1, msg: '无效的角色', data: {} });
     }
+    if (!canManageDatabaseRole(currentRole, role)) return res.status(403).json({ code: -1, msg: '只能创建严格低于自身权限的账号', data: {} });
+    if (!isValidEmail(email)) return res.status(400).json({ code: -1, msg: '邮箱格式不正确', data: {} });
+    if (!validDatabasePassword(password)) return res.status(400).json({ code: -1, msg: '密码长度必须为 8-200 位', data: {} });
+    if (nickname.length > 64 || phone.length > 32) return res.status(400).json({ code: -1, msg: '昵称或手机号长度超出限制', data: {} });
 
     const [existing] = await mysqlPool.query('SELECT id FROM user WHERE email = ?', [email]);
     if (existing.length > 0) return res.status(409).json({ code: -1, msg: '邮箱已被注册', data: {} });
@@ -2956,36 +3018,37 @@ app.post('/api/user/create', authMiddleware, adminMiddleware, async (req, res) =
 });
 
 // 账号管理 - 编辑账号
-app.patch('/api/user/update/:id', authMiddleware, adminMiddleware, async (req, res) => {
+app.patch('/api/user/update/:id', authJson, authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { nickname, role, phone } = req.body;
+    const { nickname, role, phone } = req.body || {};
     const currentRole = req.user.role;
 
     const [users] = await mysqlPool.query('SELECT role FROM user WHERE id = ?', [id]);
     if (users.length === 0) return res.status(404).json({ code: -1, msg: '用户不存在', data: {} });
 
     const targetRole = users[0].role;
-    const roleHierarchy = { super: 5, manager: 4, admin: 3, distributor: 2, user: 1 };
-
-    // 不能操作上级
-    if (roleHierarchy[targetRole] > roleHierarchy[currentRole]) {
-      return res.status(403).json({ code: -1, msg: '不能修改上级角色账号', data: {} });
-    }
-    // 不能修改 super（除非自己是 super）
-    if (targetRole === 'super' && currentRole !== 'super') {
-      return res.status(403).json({ code: -1, msg: '不能修改超级管理员账号', data: {} });
-    }
+    if (!canManageDatabaseRole(currentRole, targetRole)) return res.status(403).json({ code: -1, msg: '只能管理严格低于自身权限的账号', data: {} });
 
     const updates = [];
     const params = [];
-    if (nickname) { updates.push('nickname = ?'); params.push(nickname); }
-    if (phone !== undefined) { updates.push('phone = ?'); params.push(phone); }
-    if (role) {
-      if (role === 'super') return res.status(403).json({ code: -1, msg: '不能分配超级管理员角色', data: {} });
-      if (roleHierarchy[role] > roleHierarchy[currentRole]) return res.status(403).json({ code: -1, msg: '不能分配比自己更高的角色', data: {} });
-      updates.push('role = ?'); params.push(role);
+    if (nickname !== undefined) {
+      const value = String(nickname || '').trim();
+      if (value.length > 64) return res.status(400).json({ code: -1, msg: '昵称长度不能超过 64 位', data: {} });
+      updates.push('nickname = ?'); params.push(value || null);
     }
+    if (phone !== undefined) {
+      const value = String(phone || '').trim();
+      if (value.length > 32) return res.status(400).json({ code: -1, msg: '手机号长度不能超过 32 位', data: {} });
+      updates.push('phone = ?'); params.push(value || null);
+    }
+    if (role) {
+      const nextRole = String(role).trim();
+      if (!Object.hasOwn(databaseRoleHierarchy, nextRole)) return res.status(400).json({ code: -1, msg: '无效的角色', data: {} });
+      if (!canManageDatabaseRole(currentRole, nextRole)) return res.status(403).json({ code: -1, msg: '只能分配严格低于自身权限的角色', data: {} });
+      updates.push('role = ?'); params.push(nextRole);
+    }
+    if (!updates.length) return res.status(400).json({ code: -1, msg: '没有可更新的字段', data: {} });
     params.push(id);
     await mysqlPool.query(`UPDATE user SET ${updates.join(', ')} WHERE id = ?`, params);
     res.json({ code: 0, msg: '更新成功', data: {} });
@@ -2996,20 +3059,18 @@ app.patch('/api/user/update/:id', authMiddleware, adminMiddleware, async (req, r
 });
 
 // 账号管理 - 重置密码
-app.post('/api/user/reset-password/:id', authMiddleware, adminMiddleware, async (req, res) => {
+app.post('/api/user/reset-password/:id', authJson, authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { newPassword } = req.body;
+    const { newPassword } = req.body || {};
     const currentRole = req.user.role;
 
     const [users] = await mysqlPool.query('SELECT role FROM user WHERE id = ?', [id]);
     if (users.length === 0) return res.status(404).json({ code: -1, msg: '用户不存在', data: {} });
 
     const targetRole = users[0].role;
-    const roleHierarchy = { super: 5, manager: 4, admin: 3, distributor: 2, user: 1 };
-    if (roleHierarchy[targetRole] > roleHierarchy[currentRole]) {
-      return res.status(403).json({ code: -1, msg: '不能重置上级账号密码', data: {} });
-    }
+    if (!canManageDatabaseRole(currentRole, targetRole)) return res.status(403).json({ code: -1, msg: '只能管理严格低于自身权限的账号', data: {} });
+    if (!validDatabasePassword(newPassword)) return res.status(400).json({ code: -1, msg: '密码长度必须为 8-200 位', data: {} });
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await mysqlPool.query('UPDATE user SET password = ? WHERE id = ?', [passwordHash, id]);
@@ -3021,20 +3082,18 @@ app.post('/api/user/reset-password/:id', authMiddleware, adminMiddleware, async 
 });
 
 // 账号管理 - 启用/禁用账号
-app.patch('/api/user/toggle/:id', authMiddleware, adminMiddleware, async (req, res) => {
+app.patch('/api/user/toggle/:id', authJson, authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { disabled } = req.body;
+    const { disabled } = req.body || {};
     const currentRole = req.user.role;
 
     const [users] = await mysqlPool.query('SELECT role FROM user WHERE id = ?', [id]);
     if (users.length === 0) return res.status(404).json({ code: -1, msg: '用户不存在', data: {} });
 
     const targetRole = users[0].role;
-    const roleHierarchy = { super: 5, manager: 4, admin: 3, distributor: 2, user: 1 };
-    if (roleHierarchy[targetRole] > roleHierarchy[currentRole]) {
-      return res.status(403).json({ code: -1, msg: '不能操作上级账号', data: {} });
-    }
+    if (!canManageDatabaseRole(currentRole, targetRole)) return res.status(403).json({ code: -1, msg: '只能管理严格低于自身权限的账号', data: {} });
+    if (typeof disabled !== 'boolean') return res.status(400).json({ code: -1, msg: 'disabled 必须为布尔值', data: {} });
 
     // 需要在 user 表添加 disabled 字段，如果不存在就跳过
     try {
@@ -3052,16 +3111,22 @@ app.patch('/api/user/toggle/:id', authMiddleware, adminMiddleware, async (req, r
 });
 
 // 忘记密码 - 通过邮箱验证码重置
-app.post('/api/user/forgot-password', async (req, res) => {
+app.post('/api/user/forgot-password', authJson, async (req, res) => {
   try {
-    const { email, code, newPassword } = req.body;
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const code = String(req.body?.code || '').trim();
+    const newPassword = String(req.body?.newPassword || '');
     if (!email || !code || !newPassword) return res.status(400).json({ code: -1, msg: '参数缺失', data: {} });
-    if (newPassword.length < 8) return res.status(400).json({ code: -1, msg: '密码至少8位', data: {} });
+    if (!isQqEmail(email) || !/^\d{6}$/.test(code)) return res.status(400).json({ code: -1, msg: '邮箱或验证码格式不正确', data: {} });
+    if (!validDatabasePassword(newPassword)) return res.status(400).json({ code: -1, msg: '密码长度必须为 8-200 位', data: {} });
+    if (!jwtSecret()) return apiError(res, 'JWT_SECRET 未配置，无法安全验证验证码', 503);
 
+    await ensureEmailCodeSchema();
+    const codeHash = verificationCodeHash(email, 'forgot', code);
     const conn = await mysqlPool.getConnection();
     try {
       await conn.beginTransaction();
-      const [codes] = await conn.query('SELECT id FROM email_code WHERE email = ? AND code = ? AND expire_time > NOW() FOR UPDATE', [email, code]);
+      const [codes] = await conn.query("SELECT id FROM email_code WHERE email = ? AND purpose = 'forgot' AND code_hash = ? AND expire_time > NOW() FOR UPDATE", [email, codeHash]);
       if (codes.length === 0) { await conn.rollback(); return res.status(400).json({ code: -1, msg: '验证码错误或已过期', data: {} }); }
 
       const passwordHash = await bcrypt.hash(newPassword, 10);
