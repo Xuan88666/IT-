@@ -1615,11 +1615,45 @@ async function bundleChecks(checks) {
   return { ok: results.every((item) => item.ok), output: results.map((item) => `===== ${item.name}：${item.ok ? '正常' : '发现异常'} =====\n${item.output}`).join('\n\n') };
 }
 function runPowerShell(script, timeout = 10000) {
+  if (process.platform !== 'win32') {
+    return Promise.resolve({ ok: false, output: '此工具需要在 Windows 设备上通过本地 Agent 执行；当前服务部署在 Linux 服务器。' });
+  }
   return new Promise((resolve) => execFile('powershell.exe', ['-NoProfile', '-Command', `$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); ${script}`], { windowsHide: true, timeout, maxBuffer: 1024 * 1024, encoding: 'buffer' }, (error, stdout, stderr) => {
     const data = stdout?.length ? stdout : stderr;
     const output = data?.length ? new TextDecoder('utf-8').decode(data).trim() : (error?.message || 'No output');
     resolve({ ok: !error, output });
   }));
+}
+const isWindowsHost = process.platform === 'win32';
+function runLinux(command, args = [], timeout = 10000) {
+  return run(command, args, timeout);
+}
+function linuxOnly(output) {
+  return { ok: false, output: isWindowsHost ? '此工具仅适用于 Linux 服务器。' : output };
+}
+function localNetworkInfo() {
+  if (isWindowsHost) return run('ipconfig', ['/all'], 10000);
+  return runLinux('sh', ['-lc', 'ip -brief address; printf "\\n默认路由：\\n"; ip route show default; printf "\\nDNS：\\n"; sed -n "1,12p" /etc/resolv.conf'], 10000);
+}
+function localRouteInfo() {
+  if (isWindowsHost) return run('route', ['print', '-4'], 8000);
+  return runLinux('ip', ['route'], 8000);
+}
+function localAdapterHealth() {
+  if (isWindowsHost) return runPowerShell("Get-NetAdapter -IncludeHidden | Select-Object Name,InterfaceDescription,Status,MediaConnectionState,LinkSpeed,MacAddress | Sort-Object Status,Name | Format-Table -AutoSize");
+  return runLinux('sh', ['-lc', 'ip -brief link; printf "\\n接口统计：\\n"; sed -n "1,80p" /proc/net/dev'], 10000);
+}
+function localGatewayHealth() {
+  if (isWindowsHost) return runPowerShell("$routes = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Where-Object { $_.NextHop -and $_.NextHop -ne '0.0.0.0' } | Sort-Object RouteMetric; if (-not $routes) { throw '未找到 IPv4 默认网关。' }; $results = foreach ($route in $routes) { $reply = Test-Connection -ComputerName $route.NextHop -Count 2 -Quiet -ErrorAction SilentlyContinue; [pscustomobject]@{ Interface = $route.InterfaceAlias; Gateway = $route.NextHop; RouteMetric = $route.RouteMetric; Reachable = if ($reply) { '正常' } else { '不可达' } } }; $results | Format-Table -AutoSize");
+  return runLinux('sh', ['-lc', 'gateway=$(ip route show default | awk "{print $3; exit}"); if [ -z "$gateway" ]; then echo "未找到默认网关"; exit 1; fi; echo "默认网关: $gateway"; ping -c 2 -W 2 "$gateway"'], 10000);
+}
+function localSystemInfo() {
+  if (isWindowsHost) return runPowerShell("Get-CimInstance Win32_OperatingSystem | Select-Object CSName,Caption,Version,LastBootUpTime,TotalVisibleMemorySize,FreePhysicalMemory | Format-List");
+  return runLinux('sh', ['-lc', 'hostnamectl 2>/dev/null || hostname; printf "\\n系统：\\n"; sed -n "1,8p" /etc/os-release; printf "\\n运行时间与负载：\\n"; uptime; printf "\\n内存：\\n"; free -h'], 10000);
+}
+function localResourceHotspots() {
+  if (isWindowsHost) return runPowerShell("'CPU 累计时间靠前的进程'; Get-Process | Sort-Object CPU -Descending | Select-Object -First 12 ProcessName,Id,@{Name='CPUSeconds';Expression={[math]::Round($_.CPU,1)}},@{Name='MemoryMB';Expression={[math]::Round($_.WorkingSet64 / 1MB,1)}} | Format-Table -AutoSize; ''; '内存占用靠前的进程'; Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 12 ProcessName,Id,@{Name='MemoryMB';Expression={[math]::Round($_.WorkingSet64 / 1MB,1)}},@{Name='CPUSeconds';Expression={[math]::Round($_.CPU,1)}} | Format-Table -AutoSize");
+  return runLinux('sh', ['-lc', 'echo "CPU 使用率靠前"; ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -13; printf "\\n内存占用靠前\\n"; ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -13'], 10000);
 }
 const psQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
 function validDisplayName(value) {
@@ -2363,21 +2397,21 @@ async function handleApi(req, res, pathname) {
     if (assetId && !asset) return send(res, 400, { ok: false, output: '关联资产不存在。' });
     const ticket = { id: `INC-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${String(store.tickets.length + 1).padStart(3, '0')}`, title: body.title.trim().slice(0, 160), site: body.site?.trim().slice(0, 80) || asset?.site || '待分派', priority: body.priority || '普通', status: '待处理', assetId: assetId || null, assetName: asset?.name || null, createdAt: new Date().toISOString() }; store.tickets.unshift(ticket); await writeStore(store); return send(res, 201, ticket);
   }
-  if (pathname === '/api/tools/network-info') return send(res, 200, await run('ipconfig', ['/all'], 10000));
-  if (pathname === '/api/tools/adapter-health') return send(res, 200, await runPowerShell("Get-NetAdapter -IncludeHidden | Select-Object Name,InterfaceDescription,Status,MediaConnectionState,LinkSpeed,MacAddress | Sort-Object Status,Name | Format-Table -AutoSize"));
-  if (pathname === '/api/tools/gateway-health') return send(res, 200, await runPowerShell("$routes = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Where-Object { $_.NextHop -and $_.NextHop -ne '0.0.0.0' } | Sort-Object RouteMetric; if (-not $routes) { throw '未找到 IPv4 默认网关。' }; $results = foreach ($route in $routes) { $reply = Test-Connection -ComputerName $route.NextHop -Count 2 -Quiet -ErrorAction SilentlyContinue; [pscustomobject]@{ Interface = $route.InterfaceAlias; Gateway = $route.NextHop; RouteMetric = $route.RouteMetric; Reachable = if ($reply) { '正常' } else { '不可达' } } }; $results | Format-Table -AutoSize"));
+  if (pathname === '/api/tools/network-info') return send(res, 200, await localNetworkInfo());
+  if (pathname === '/api/tools/adapter-health') return send(res, 200, await localAdapterHealth());
+  if (pathname === '/api/tools/gateway-health') return send(res, 200, await localGatewayHealth());
   if (pathname === '/api/tools/internet-health') return send(res, 200, await bundleChecks([
     { name: '公共 DNS 解析', task: () => run('nslookup', ['www.cloudflare.com'], 8000) },
     { name: '公共 IP 连通性', task: () => run('ping', ['-n', '4', '-w', '1500', '1.1.1.1'], 9000) },
     { name: 'HTTPS 出口', task: () => webProbe('www.cloudflare.com', 443, true) },
   ]));
-  if (pathname === '/api/tools/wifi-info') return send(res, 200, await run('netsh', ['wlan', 'show', 'interfaces'], 8000));
-  if (pathname === '/api/tools/route-info') return send(res, 200, await run('route', ['print', '-4'], 8000));
+  if (pathname === '/api/tools/wifi-info') return send(res, 200, isWindowsHost ? await run('netsh', ['wlan', 'show', 'interfaces'], 8000) : linuxOnly('服务器未检测到可由 Web 服务管理的 Wi-Fi 接口。请在 Windows Agent 上执行 Wi-Fi 巡检。'));
+  if (pathname === '/api/tools/route-info') return send(res, 200, await localRouteInfo());
   if (pathname === '/api/tools/network-snapshot') return send(res, 200, await bundleChecks([
-    { name: 'IP、DNS、网关', task: () => run('ipconfig', ['/all'], 10000) },
-    { name: 'IPv4 路由表', task: () => run('route', ['print', '-4'], 8000) },
-    { name: 'Wi-Fi 状态', task: () => run('netsh', ['wlan', 'show', 'interfaces'], 8000) },
-    { name: 'ARP / MAC 表', task: () => run('arp', ['-a'], 8000) },
+    { name: 'IP、DNS、网关', task: () => localNetworkInfo() },
+    { name: 'IPv4 路由表', task: () => localRouteInfo() },
+    { name: 'Wi-Fi 状态', task: () => isWindowsHost ? run('netsh', ['wlan', 'show', 'interfaces'], 8000) : linuxOnly('Linux 服务器未配置 Wi-Fi 接口。') },
+    { name: 'ARP / MAC 表', task: () => isWindowsHost ? run('arp', ['-a'], 8000) : runLinux('ip', ['neigh'], 8000) },
   ]));
   if (pathname === '/api/tools/dns-benchmark') return send(res, 200, await dnsBenchmark({ domain: body.domain, servers: body.servers, attempts: body.attempts }));
   if (pathname === '/api/tools/ip-conflict-check') return send(res, 200, await ipConflictCheck());
@@ -2414,8 +2448,8 @@ async function handleApi(req, res, pathname) {
   if (pathname === '/api/tools/repair-network') return send(res, 200, await runAuditedAction('受控网络修复', '刷新 DNS 并续租 DHCP', () => bundleChecks([{ name: '刷新 DNS 缓存', task: () => run('ipconfig', ['/flushdns'], 8000) }, { name: 'DHCP 续租', task: () => run('ipconfig', ['/renew'], 30000) }])));
   if (pathname === '/api/tools/repair-printer') return send(res, 200, await runAuditedAction('受控打印修复', '重启 Print Spooler', () => runPowerShell("Restart-Service -Name Spooler -Force; Get-Service -Name Spooler | Format-Table -AutoSize")));
   if (pathname === '/api/tools/repair-printer-queue') return send(res, 200, await runAuditedAction('受控打印修复', '清理打印队列并重启 Spooler', () => runPowerShell("Stop-Service -Name Spooler -Force; $queuePath = Join-Path $env:WINDIR 'System32\\spool\\PRINTERS'; $files = Get-ChildItem -LiteralPath $queuePath -Force -ErrorAction SilentlyContinue; $count = @($files).Count; if ($count -gt 0) { Remove-Item -LiteralPath $files.FullName -Force -ErrorAction Stop }; Start-Service -Name Spooler; \"已清理 $count 个打印队列文件。\"; Get-Service -Name Spooler | Format-Table -AutoSize")));
-  if (pathname === '/api/tools/system-info') return send(res, 200, await runPowerShell("Get-CimInstance Win32_OperatingSystem | Select-Object CSName,Caption,Version,LastBootUpTime,TotalVisibleMemorySize,FreePhysicalMemory | Format-List"));
-  if (pathname === '/api/tools/resource-hotspots') return send(res, 200, await runPowerShell("'CPU 累计时间靠前的进程'; Get-Process | Sort-Object CPU -Descending | Select-Object -First 12 ProcessName,Id,@{Name='CPUSeconds';Expression={[math]::Round($_.CPU,1)}},@{Name='MemoryMB';Expression={[math]::Round($_.WorkingSet64 / 1MB,1)}} | Format-Table -AutoSize; ''; '内存占用靠前的进程'; Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 12 ProcessName,Id,@{Name='MemoryMB';Expression={[math]::Round($_.WorkingSet64 / 1MB,1)}},@{Name='CPUSeconds';Expression={[math]::Round($_.CPU,1)}} | Format-Table -AutoSize"));
+  if (pathname === '/api/tools/system-info') return send(res, 200, await localSystemInfo());
+  if (pathname === '/api/tools/resource-hotspots') return send(res, 200, await localResourceHotspots());
   if (pathname === '/api/tools/identity-info') return send(res, 200, await bundleChecks([
     { name: '计算机与域状态', task: () => runPowerShell("Get-CimInstance Win32_ComputerSystem | Select-Object Name,Domain,PartOfDomain,UserName | Format-List") },
     { name: '当前登录身份与组', task: () => run('whoami', ['/all'], 10000) },
